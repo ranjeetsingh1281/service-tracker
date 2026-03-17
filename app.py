@@ -6,7 +6,7 @@ import os
 st.set_page_config(page_title="ELGi Service Tracker Pro", layout="wide")
 
 st.title("🛠️ ELGi Compressor Service Tracker Pro")
-st.markdown("Customer Summary & Live Machine Details")
+st.markdown("Advanced Machine Details (Counts & Data Fixed)")
 
 # Data Load Function
 @st.cache_data
@@ -18,6 +18,12 @@ def load_data():
         m_df = pd.read_excel(m_file, engine='openpyxl')
         s_df = pd.read_excel(s_file, engine='openpyxl')
         
+        # Clean column values (Remove leading/trailing spaces)
+        if 'Warranty Type' in m_df.columns:
+            m_df['Warranty Type'] = m_df['Warranty Type'].astype(str).str.strip()
+        if 'CUSTOMER NAME' in m_df.columns:
+            m_df['CUSTOMER NAME'] = m_df['CUSTOMER NAME'].astype(str).str.strip()
+
         # Date columns conversion
         date_columns = [
             'Warranty Start Date', 'Warranty End date', 'Last Call HMR Date',
@@ -32,6 +38,7 @@ def load_data():
         for col in date_columns:
             if col in m_df.columns:
                 m_df[col] = pd.to_datetime(m_df[col], errors='coerce')
+
         s_df['Call Logged Date'] = pd.to_datetime(s_df['Call Logged Date'], errors='coerce')
         return m_df, s_df
     return None, None
@@ -54,16 +61,19 @@ if master_df is not None:
     selected_customer = st.sidebar.selectbox("1. Select Customer", options=["All Customers"] + customer_list)
 
     if selected_customer != "All Customers":
-        filtered_df = master_df[master_df['CUSTOMER NAME'] == selected_customer]
+        filtered_df = master_df[master_df['CUSTOMER NAME'] == selected_customer].copy()
         
-        # --- FIXED COUNT LOGIC ---
+        # --- IMPROVED COUNT LOGIC ---
         st.subheader(f"📊 Summary for {selected_customer}")
         m1, m2, m3 = st.columns(3)
         
         total_count = len(filtered_df)
-        # Check for 'Non' or 'Out' for Out of Warranty
-        out_of_warranty_count = len(filtered_df[filtered_df['Warranty Type'].str.contains('Non|Out', na=False, case=False)])
-        # Warranty count = Total - Non Warranty
+        
+        # Out of Warranty (Jisme 'Non' word hai)
+        out_of_warranty_df = filtered_df[filtered_df['Warranty Type'].str.contains('Non', na=False, case=False)]
+        out_of_warranty_count = len(out_of_warranty_df)
+        
+        # In Warranty (Jisme 'Warranty' hai par 'Non' nahi hai)
         warranty_count = total_count - out_of_warranty_count
         
         m1.metric("Total Fabrications", total_count)
@@ -77,13 +87,13 @@ if master_df is not None:
     selected_fab = st.sidebar.selectbox("2. Select Fabrication Number", options=["Select Number"] + fab_list)
 
     if selected_fab != "Select Number":
-        m_info = master_df[master_df['Fabrication No'] == selected_fab].iloc[0]
+        m_info = filtered_df[filtered_df['Fabrication No'] == selected_fab].iloc[0]
 
         # Machine Header
         st.subheader(f"🛡️ Obligation: {m_info.get('Warranty Type', 'N/A')}")
         st.write(f"📅 **Warranty Start:** {format_dt(m_info.get('Warranty Start Date'))} | **End:** {format_dt(m_info.get('Warranty End date'))}")
 
-        # Live Calculation
+        # Live Calculation logic remains the same...
         current_hmr = pd.to_numeric(m_info.get('HMR Cal.', 0), errors='coerce')
         last_service_hmr = pd.to_numeric(m_info.get('Last Call HMR', 0), errors='coerce')
         elapsed_hours = current_hmr - last_service_hmr if pd.notna(current_hmr) and pd.notna(last_service_hmr) else 0
@@ -92,11 +102,12 @@ if master_df is not None:
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            st.info("📋 Customer Info")
+            st.info("📋 Machine Info")
             st.write(f"**Customer:** {m_info.get('CUSTOMER NAME', 'N/A')}")
             st.write(f"**Current HMR:** {current_hmr}")
-            st.write(f"**Hours since Last Service:** {int(elapsed_hours)} Hrs")
+            st.write(f"**Since Last Service:** {int(elapsed_hours)} Hrs")
 
+        # ... (Rest of the Columns and History logic remains the same)
         with col2:
             st.info("📅 Replacement Dates")
             st.write(f"**Oil R-Date:** {format_dt(m_info.get('Oil Replacement Date'))}")
@@ -105,11 +116,7 @@ if master_df is not None:
 
         with col3:
             st.info("⚙️ Live Remaining Hours")
-            rem_cols = {
-                'HMR - Oil remaining': 'Oil',
-                'Air filter replaced - Compressor Remaining Hours': 'AFC',
-                'HMR - Separator remaining': 'AOS'
-            }
+            rem_cols = {'HMR - Oil remaining': 'Oil', 'Air filter replaced - Compressor Remaining Hours': 'AFC', 'HMR - Separator remaining': 'AOS'}
             for orig, label in rem_cols.items():
                 orig_rem = pd.to_numeric(m_info.get(orig, 0), errors='coerce')
                 live_rem = orig_rem - elapsed_hours if pd.notna(orig_rem) else 0
@@ -121,7 +128,6 @@ if master_df is not None:
             st.write(f"**AFC Due:** {format_dt(m_info.get('AFC DUE DATE'))}")
             st.write(f"**AOS Due:** {format_dt(m_info.get('AOS DUE DATE'))}")
 
-        # Service History
         st.divider()
         st.subheader("🕒 Service History")
         history = service_df[service_df['Fabrication Number'] == selected_fab].copy().sort_values(by='Call Logged Date', ascending=False)
@@ -130,6 +136,6 @@ if master_df is not None:
                 with st.expander(f"📅 {format_dt(row['Call Logged Date'])} | ⚙️ {row.get('Call HMR', 'N/A')} HMR"):
                     st.info(row.get('Service Engineer Comments', 'No comments.'))
     else:
-        st.info("👈 Sidebar se Customer aur machine select karein.")
+        st.info("👈 Sidebar se select karein.")
 else:
     st.error("Excel files nahi mili!")
