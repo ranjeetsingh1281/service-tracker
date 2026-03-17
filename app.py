@@ -6,7 +6,7 @@ import os
 st.set_page_config(page_title="ELGi Service Tracker Pro", layout="wide")
 
 st.title("🛠️ ELGi Fabrication Service Tracker Pro")
-st.markdown("Advanced Machine Details (Excel Version with Formatted Dates)")
+st.markdown("Advanced Machine Details (Excel Version with All Dates Formatted)")
 
 # Data Load Function
 @st.cache_data
@@ -18,9 +18,19 @@ def load_data():
         m_df = pd.read_excel(m_file, engine='openpyxl')
         s_df = pd.read_excel(s_file, engine='openpyxl')
         
-        # Sabhi date columns ko convert karein taaki format change ho sake
-        date_cols_m = ['Warranty Start Date', 'Warranty End date', 'OIL DUE DATE', 'AFC DUE DATE', 'AFE DUE DATE', 'MOF DUE DATE', 'ROF DUE DATE', 'AOS DUE DATE', 'RGT DUE DATE', '1500 KIT DUE DATE', '3000 KIT DUE DATE']
-        for col in date_cols_m:
+        # In sabhi columns ko datetime mein convert karein taaki format change ho sake
+        all_date_cols = [
+            'Warranty Start Date', 'Warranty End date', 
+            'Oil Replacement Date', 'Air filter Compressor Replaced Date', 
+            'Air filter Engine Replaced Date', 'Main Oil filter Replaced Date', 
+            'Return Oil filter Replaced Date', 'AOS Replaced Date', 
+            'Greasing Done Date', '1500 Valve kit Replaced Date', 
+            '3000 Valve kit Replaced Date', 'OIL DUE DATE', 'AFC DUE DATE', 
+            'AFE DUE DATE', 'MOF DUE DATE', 'ROF DUE DATE', 'AOS DUE DATE', 
+            'RGT DUE DATE', '1500 KIT DUE DATE', '3000 KIT DUE DATE'
+        ]
+        
+        for col in all_date_cols:
             if col in m_df.columns:
                 m_df[col] = pd.to_datetime(m_df[col], errors='coerce')
 
@@ -30,10 +40,14 @@ def load_data():
 
 master_df, service_df = load_data()
 
-# Date formatting helper function
+# Date formatting helper function (dd-mmm-yy)
 def format_dt(dt):
-    if pd.isna(dt): return "N/A"
-    return dt.strftime('%d-%b-%y')
+    if pd.isna(dt) or dt == 0 or str(dt).lower() == "nan": 
+        return "N/A"
+    try:
+        return dt.strftime('%d-%b-%y')
+    except:
+        return str(dt) # Agar conversion fail ho toh original value dikhaye
 
 if master_df is not None:
     fab_list = sorted(master_df['Fabrication No'].unique().astype(str))
@@ -44,10 +58,8 @@ if master_df is not None:
 
         # --- SECTION 1: WARRANTY HEADER ---
         st.divider()
-        w_start = format_dt(m_info.get('Warranty Start Date'))
-        w_end = format_dt(m_info.get('Warranty End date'))
         st.subheader(f"🛡️ Warranty: {m_info.get('Warranty Type', 'N/A')}")
-        st.write(f"📅 **Start:** {w_start}  |  **End:** {w_end}")
+        st.write(f"📅 **Start:** {format_dt(m_info.get('Warranty Start Date'))}  |  **End:** {format_dt(m_info.get('Warranty End date'))}")
 
         # --- SECTION 2: 4-COLUMN LAYOUT ---
         st.divider()
@@ -62,47 +74,59 @@ if master_df is not None:
 
         with col2:
             st.info("📅 Replacement Dates")
-            # In dates ko bhi format_dt se pass karein agar ye Excel mein date type hain
-            st.write(f"**Oil R-Date:** {m_info.get('Oil Replacement Date', 'N/A')}")
-            st.write(f"**AFC R-Date:** {m_info.get('Air filter Compressor Replaced Date', 'N/A')}")
-            st.write(f"**AFE R-Date:** {m_info.get('Air filter Engine Replaced Date', 'N/A')}")
-            st.write(f"**AOS R-Date:** {m_info.get('AOS Replaced Date', 'N/A')}")
-            st.write(f"**3000 Kit R-Date:** {m_info.get('3000 Valve kit Replaced Date', 'N/A')}")
+            # Replacement Dates with format_dt
+            st.write(f"**Oil R-Date:** {format_dt(m_info.get('Oil Replacement Date'))}")
+            st.write(f"**AFC R-Date:** {format_dt(m_info.get('Air filter Compressor Replaced Date'))}")
+            st.write(f"**AFE R-Date:** {format_dt(m_info.get('Air filter Engine Replaced Date'))}")
+            st.write(f"**MOF R-Date:** {format_dt(m_info.get('Main Oil filter Replaced Date'))}")
+            st.write(f"**ROF R-Date:** {format_dt(m_info.get('Return Oil filter Replaced Date'))}")
+            st.write(f"**AOS R-Date:** {format_dt(m_info.get('AOS Replaced Date'))}")
+            st.write(f"**Greasing:** {format_dt(m_info.get('Greasing Done Date'))}")
+            st.write(f"**1500 Kit:** {format_dt(m_info.get('1500 Valve kit Replaced Date'))}")
+            st.write(f"**3000 Kit:** {format_dt(m_info.get('3000 Valve kit Replaced Date'))}")
 
         with col3:
             st.info("⚙️ Remaining Hours")
             st.write(f"**Oil Rem:** {m_info.get('HMR - Oil remaining', 'N/A')}")
             st.write(f"**AFC Rem:** {m_info.get('Air filter replaced - Compressor Remaining Hours', 'N/A')}")
             st.write(f"**AFE Rem:** {m_info.get('Air filter replaced - Engine Remaining Hours', 'N/A')}")
+            st.write(f"**MOF Rem:** {m_info.get('Main Oil filter Remaining Hours','N/A')}")
+            st.write(f"**ROF Rem:** {m_info.get('Return Oil filter Remaining Hours','N/A')}")
             st.write(f"**AOS Rem:** {m_info.get('HMR - Separator remaining', 'N/A')}")
+            st.write(f"**RGT Rem:** {m_info.get('HMR - Motor regressed remaining','N/A')}")
+            st.write(f"**1500 Kit Rem:** {m_info.get('1500 Valve kit Remaining Hours','N/A')}")
+            st.write(f"**3000 Kit Rem:** {m_info.get('3000 Valve kit Remaining Hours', 'N/A')}")
 
         with col4:
             st.error("🚨 DUE DATES")
-            # DUE DATES ko dd-mmm-yy format mein dikhana
             st.write(f"**Oil Due:** {format_dt(m_info.get('OIL DUE DATE'))}")
             st.write(f"**AFC Due:** {format_dt(m_info.get('AFC DUE DATE'))}")
             st.write(f"**AFE Due:** {format_dt(m_info.get('AFE DUE DATE'))}")
+            st.write(f"**MOF Due:** {format_dt(m_info.get('MOF DUE DATE'))}")
+            st.write(f"**ROF Due:** {format_dt(m_info.get('ROF DUE DATE'))}")
             st.write(f"**AOS Due:** {format_dt(m_info.get('AOS DUE DATE'))}")
+            st.write(f"**Greasing Due:** {format_dt(m_info.get('RGT DUE DATE'))}")
+            st.write(f"**1500 Kit Due:** {format_dt(m_info.get('1500 KIT DUE DATE'))}")
             st.write(f"**3000 Kit Due:** {format_dt(m_info.get('3000 KIT DUE DATE'))}")
 
         # --- SECTION 3: SERVICE HISTORY ---
         st.divider()
-        st.subheader("🕒 Service History (Descending)")
+        st.subheader("🕒 Service History (Newest First)")
         
         history = service_df[service_df['Fabrication Number'] == selected_fab].copy()
         history = history.sort_values(by='Call Logged Date', ascending=False)
         
         if not history.empty:
             for index, row in history.iterrows():
-                # Service history ki date format karna
                 d_str = format_dt(row['Call Logged Date'])
                 header = f"📅 {d_str} | ⚙️ {row.get('Call HMR', 'N/A')} HMR | {row.get('Call Type', 'N/A')}"
                 
                 with st.expander(header):
+                    st.write(f"**Tracking No:** {row.get('Call Tracking Number', 'N/A')}")
                     st.write(f"**Status:** {row.get('Call Status', 'N/A')}")
-                    st.write(f"**Engineer Comments:**")
+                    st.write("**Engineer Comments:**")
                     st.info(row.get('Service Engineer Comments', 'No comments.'))
         else:
             st.warning("No history found.")
 else:
-    st.error("Files nahi mili! Check 'Master_Data.xlsx' & 'Service_Detail.xlsx' on GitHub.")
+    st.error("Excel files nahi mili! Check GitHub repository.")
