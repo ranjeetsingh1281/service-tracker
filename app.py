@@ -6,7 +6,7 @@ import os
 st.set_page_config(page_title="ELGi Service Tracker Pro", layout="wide")
 
 st.title("🛠️ ELGi Compressor Service Tracker Pro")
-st.markdown("Advanced Machine Details (Excel Version with All Dates Formatted)")
+st.markdown("Advanced Machine Details")
 
 # Data Load Function
 @st.cache_data
