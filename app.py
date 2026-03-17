@@ -13,7 +13,7 @@ st.markdown("Advanced Machine Details & Service History (Excel Version)")
 def load_data():
     # Naye file names ke mutabik
     m_file = "Master_Data.xlsx"
-    s_file = "Service_Detail.xlsx"
+    s_file = "Service_Details.xlsx"
     
     if os.path.exists(m_file) and os.path.exists(s_file):
         # Excel files read karne ke liye engine='openpyxl' ka use
