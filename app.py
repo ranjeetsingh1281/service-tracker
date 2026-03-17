@@ -75,6 +75,8 @@ if master_df is not None:
             st.write(f"**Avg. Running Hrs:** {m_info.get('Avg. Hrs', 'N/A')}")
             st.write(f"**Calculated Avg Hrs:** {m_info.get('HMR Cal.', 'N/A')}")
             st.write(f"**Due Remarks:** {m_info.get('Due remarks', 'N/A')}")
+            st.write(f"**Last Call HMR:** {m_info.get('Last Call HMR', 'N/A')}")
+            st.write(f"**Last Call HMR Date:** {format_dt(m_info.get('Last Call HMR Date', 'N/A'))}")
 
         with col2:
             st.info("📅 Replacement Dates")
