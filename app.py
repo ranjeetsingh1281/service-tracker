@@ -12,7 +12,7 @@ st.markdown("Advanced Machine Details (Excel Version with Formatted Dates)")
 @st.cache_data
 def load_data():
     m_file = "Master_Data.xlsx"
-    s_file = "Service_Detail.xlsx"
+    s_file = "Service_Details.xlsx"
     
     if os.path.exists(m_file) and os.path.exists(s_file):
         m_df = pd.read_excel(m_file, engine='openpyxl')
