@@ -5,7 +5,7 @@ import os
 # Page Settings
 st.set_page_config(page_title="ELGi Service Tracker Pro", layout="wide")
 
-st.title("🛠️ ELGi Fabrication Service Tracker Pro")
+st.title("🛠️ ELGi Compressor Service Tracker Pro")
 st.markdown("Advanced Machine Details (Excel Version with All Dates Formatted)")
 
 # Data Load Function
@@ -58,7 +58,7 @@ if master_df is not None:
 
         # --- SECTION 1: WARRANTY HEADER ---
         st.divider()
-        st.subheader(f"🛡️ Warranty: {m_info.get('Warranty Type', 'N/A')}")
+        st.subheader(f"🛡️ Obligation (Warranty): {m_info.get('Warranty Type', 'N/A')}")
         st.write(f"📅 **Start:** {format_dt(m_info.get('Warranty Start Date'))}  |  **End:** {format_dt(m_info.get('Warranty End date'))}")
 
         # --- SECTION 2: 4-COLUMN LAYOUT ---
@@ -69,8 +69,12 @@ if master_df is not None:
             st.info("📋 Customer Info")
             st.write(f"**Customer:** {m_info.get('CUSTOMER NAME', 'N/A')}")
             st.write(f"**Address:** {m_info.get('Address', 'N/A')}")
-            st.write(f"**Contact 1:** {m_info.get('Contact No. 1', 'N/A')}")
+            st.write(f"**Contact No 1:** {m_info.get('Contact No. 1', 'N/A')}")
+            st.write(f"**Contact No 2:** {m_info.get('Contact No. 2', 'N/A')}")
             st.write(f"**Category:** {m_info.get('Category', 'N/A')}")
+            st.write(f"**Avg. Running Hrs:** {m_info.get('Avg. Hrs', 'N/A')}")
+            st.write(f"**Calculated Avg Hrs:** {m_info.get('HMR Cal.', 'N/A')}")
+            st.write(f"**Due Remarks:** {m_info.get('Due remarks', 'N/A')}")
 
         with col2:
             st.info("📅 Replacement Dates")
