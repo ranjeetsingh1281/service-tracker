@@ -78,11 +78,11 @@ if master_df is not None:
             st.write(f"**Address:** {m_info.get('Address', 'N/A')}")
             st.write(f"**Contact No 1:** {m_info.get('Contact No. 1', 'N/A')}")
             st.write(f"**Category:** {m_info.get('Category', 'N/A')}")
-            st.write(f"**Avg. Running Hrs:** {m_info.get('Avg. Hrs', 'N/A')}")
-            st.write(f"**Current HMR (Cal.):** {current_hmr}")
+            st.write(f"**Avg. Running Hrs:** {m_info.get('Avg. Hrs', 'N/A')}👈")
+            st.write(f"**Current HMR (Cal.):** {current_hmr}👈")
             st.write(f"**Last Call HMR:** {last_service_hmr}")
             st.write(f"**Last Call HMR Date:** {format_dt(m_info.get('Last Call HMR Date'))}")
-            st.write(f"**Hours since Last Service:** {int(elapsed_hours)}")
+            st.write(f"**Hours since Last Service:** {int(elapsed_hours)}👈")
 
         with col2:
             st.info("📅 Replacement Dates")
