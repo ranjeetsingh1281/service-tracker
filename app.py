@@ -70,7 +70,6 @@ if master_df is not None:
             st.write(f"**Customer:** {m_info.get('CUSTOMER NAME', 'N/A')}")
             st.write(f"**Address:** {m_info.get('Address', 'N/A')}")
             st.write(f"**Contact No 1:** {m_info.get('Contact No. 1', 'N/A')}")
-            st.write(f"**Contact No 2:** {m_info.get('Contact No. 2', 'N/A')}")
             st.write(f"**Category:** {m_info.get('Category', 'N/A')}")
             st.write(f"**Avg. Running Hrs:** {m_info.get('Avg. Hrs', 'N/A')}")
             st.write(f"**Calculated Avg Hrs:** {m_info.get('HMR Cal.', 'N/A')}")
