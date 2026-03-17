@@ -77,18 +77,25 @@ if master_df is not None:
             st.write(f"**Customer:** {m_info.get('CUSTOMER NAME', 'N/A')}")
             st.write(f"**Address:** {m_info.get('Address', 'N/A')}")
             st.write(f"**Contact No 1:** {m_info.get('Contact No. 1', 'N/A')}")
+            st.write(f"**Category:** {m_info.get('Category', 'N/A')}")
             st.write(f"**Avg. Running Hrs:** {m_info.get('Avg. Hrs', 'N/A')}")
             st.write(f"**Current HMR (Cal.):** {current_hmr}")
             st.write(f"**Last Call HMR:** {last_service_hmr}")
+            st.write(f"**Last Call HMR Date:** {format_dt(m_info.get('Last Call HMR Date'))}")
             st.write(f"**Hours since Last Service:** {int(elapsed_hours)}")
 
         with col2:
             st.info("📅 Replacement Dates")
+             # Sabhi Replacement dates par format_dt apply kiya gaya hai
             st.write(f"**Oil R-Date:** {format_dt(m_info.get('Oil Replacement Date'))}")
             st.write(f"**AFC R-Date:** {format_dt(m_info.get('Air filter Compressor Replaced Date'))}")
             st.write(f"**AFE R-Date:** {format_dt(m_info.get('Air filter Engine Replaced Date'))}")
+            st.write(f"**MOF R-Date:** {format_dt(m_info.get('Main Oil filter Replaced Date'))}")
+            st.write(f"**ROF R-Date:** {format_dt(m_info.get('Return Oil filter Replaced Date'))}")
             st.write(f"**AOS R-Date:** {format_dt(m_info.get('AOS Replaced Date'))}")
-            st.write(f"**3000 Kit:** {format_dt(m_info.get('3000 Valve kit Replaced Date'))}")
+            st.write(f"**Greasing R-Date:** {format_dt(m_info.get('Greasing Done Date'))}")
+            st.write(f"**1500 Kit R-Date:** {format_dt(m_info.get('1500 Valve kit Replaced Date'))}")
+            st.write(f"**3000 Kit R-Date:** {format_dt(m_info.get('3000 Valve kit Replaced Date'))}")
 
         with col3:
             st.info("⚙️ Live Remaining Hours")
@@ -119,7 +126,12 @@ if master_df is not None:
             st.error("🚨 DUE DATES")
             st.write(f"**Oil Due:** {format_dt(m_info.get('OIL DUE DATE'))}")
             st.write(f"**AFC Due:** {format_dt(m_info.get('AFC DUE DATE'))}")
+            st.write(f"**AFE Due:** {format_dt(m_info.get('AFE DUE DATE'))}")
+            st.write(f"**MOF Due:** {format_dt(m_info.get('MOF DUE DATE'))}")
+            st.write(f"**ROF Due:** {format_dt(m_info.get('ROF DUE DATE'))}")
             st.write(f"**AOS Due:** {format_dt(m_info.get('AOS DUE DATE'))}")
+            st.write(f"**Greasing Due:** {format_dt(m_info.get('RGT DUE DATE'))}")
+            st.write(f"**1500 Kit Due:** {format_dt(m_info.get('1500 KIT DUE DATE'))}")
             st.write(f"**3000 Kit Due:** {format_dt(m_info.get('3000 KIT DUE DATE'))}")
 
         # --- SECTION 3: SERVICE HISTORY ---
