@@ -240,3 +240,36 @@ if master_df is not None:
             st.info(f"Is category ({st.session_state.filter_type}) mein koi data nahi mila.")
         else:
             st.info("Upar diye gaye buttons mein se ek select karein list dekhne ke liye.")
+# --- SECTION 3: SERVICE HISTORY ---
+        st.divider()
+        st.subheader("🕒 Service History (Newest First)")
+        
+        # Filtering Service_Detail
+        history = service_df[service_df['Fabrication Number'] == selected_fab].copy()
+        history = history.sort_values(by='Call Logged Date', ascending=False)
+        
+        if not history.empty:
+            for index, row in history.iterrows():
+                # Date formatting
+                d_str = format_dt(row['Call Logged Date'])
+                
+                # Header mein Call Type add kiya gaya hai
+                call_type = row.get('Call Type', 'N/A')
+                hmr_val = row.get('Call HMR', 'N/A')
+                
+                header_text = f"📅 {d_str} | ⚙️ {hmr_val} HMR | 🛠️ {call_type}"
+                
+                with st.expander(header_text):
+                    col_h1, col_h2 = st.columns(2)
+                    with col_h1:
+                        st.write(f"**Tracking No:** {row.get('Call Tracking Number', 'N/A')}")
+                        st.write(f"**Call Status:** {row.get('Call Status', 'N/A')}")
+                    with col_h2:
+                        st.write(f"**Service Engineer:** {row.get('Service Engineer', 'N/A')}")
+                        st.write(f"**Customer:** {row.get('Customer', 'N/A')}")
+                    
+                    st.write("**Engineer Comments:**")
+                    # Wrapped text info box mein
+                    st.info(row.get('Service Engineer Comments', 'No comments available.'))
+        else:
+            st.warning("Is Fabrication Number ke liye koi service history nahi mili.")
