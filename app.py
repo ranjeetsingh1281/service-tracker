@@ -183,7 +183,12 @@ if page == "Machine Tracker":
             st.write(f"**3000 Kit R-Date:** {format_dt(m_info.get('3000 Valve kit Replaced Date'))}")
         with c3:
             st.info("⚙️ Live Remaining")
-            for col, lbl in [('HMR - Oil remaining', 'Oil'), ('HMR - Separator remaining', 'AOS')]:
+            # Parts mapping for live deduction
+            for col, lbl in [('HMR - Oil remaining', 'Oil'), ('HMR - Separator remaining', 'AOS'),'Air filter replaced - Compressor Remaining Hours': 'AFC',
+                    'Air filter replaced - Engine Remaining Hours': 'AFE', 'Main Oil filter Remaining Hours': 'MOF', 'Return Oil filter Remaining Hours': 'ROF',
+                    'HMR - Motor regressed remaining': 'Greasing',
+                    '1500 Valve kit Remaining Hours': '1500 Kit',
+                    '3000 Valve kit Remaining Hours': '3000 Kit'
                 val = pd.to_numeric(m_info.get(col, 0), errors='coerce') - elapsed
                 st.write(f"**{lbl}:** {int(val)} Hrs" if val > 0 else f"**{lbl}:** 🚨 {int(val)} (Due)")
         with c4:
