@@ -179,54 +179,64 @@ if master_df is not None:
                         st.info(row.get('Service Engineer Comments', 'No comments.'))
             else: st.warning("No history found.")
         else: st.info("👈 Sidebar se Customer aur Machine select karein.")
-# --- SECTION 2: SERVICE PENDING LIST (DETAILED) ---
+# --- SECTION 2: SERVICE PENDING LIST (WITH ACTION BUTTONS) ---
     elif page == "Service Pending List":
         st.title("⏳ Service Pending Dashboard")
-        st.markdown("Niche di gayi list un machines ki hai jinki service agle kuch dino mein due hone wali hai.")
+        st.markdown("Niche diye gaye buttons par click karke due list generate karein:")
+
+        # Action Buttons Layout
+        btn_col1, btn_col2, btn_col3 = st.columns(3)
         
-        # Filter Days Selection
-        days_to_check = st.select_slider(
-            "Kitne dinon ki pending list dekhni hai?",
-            options=[7, 15, 30, 60, 90, 180],
-            value=30
-        )
+        # Session state to keep track of filter
+        if 'filter_type' not in st.session_state:
+            st.session_state.filter_type = None
 
-        today = pd.Timestamp.now().normalize()
-        future_date = today + pd.Timedelta(days=days_to_check)
+        with btn_col1:
+            if st.button("🔴 1. BIS Over Due", use_container_width=True):
+                st.session_state.filter_type = "Over Due"
         
-        # Sabhi 6 columns par filter lagana
-        pending_list = master_df[
-            (master_df['OIL DUE DATE'] <= future_date) | 
-            (master_df['AFC DUE DATE'] <= future_date) |
-            (master_df['AFE DUE DATE'] <= future_date) |
-            (master_df['AOS DUE DATE'] <= future_date) |
-            (master_df['1500 KIT DUE DATE'] <= future_date) |
-            (master_df['3000 KIT DUE DATE'] <= future_date)
-        ].copy()
+        with btn_col2:
+            if st.button("🟡 2. BIS Current Month Due", use_container_width=True):
+                st.session_state.filter_type = "Current Month"
+        
+        with btn_col3:
+            if st.button("🟢 3. BIS Next Month Due", use_container_width=True):
+                st.session_state.filter_type = "Next Month"
 
-        # Jo dates purani hain (Overdue) unhe bhi handle karega
-        # Data clean karein (Jinki sabhi dates khali hain unhe hatayein)
-        check_cols = ['OIL DUE DATE', 'AFC DUE DATE', 'AFE DUE DATE', 'AOS DUE DATE', '1500 KIT DUE DATE', '3000 KIT DUE DATE']
-        pending_list = pending_list.dropna(subset=check_cols, how='all')
+        # Logic to filter based on button click
+        pending_list = pd.DataFrame() # Khali dataframe
 
+        if st.session_state.filter_type == "Over Due":
+            st.subheader("🚨 List: BIS Over Due")
+            # Logic: Jinka 'BIS Over Due' column 0 se bada ho ya 'Yes' ho
+            pending_list = master_df[master_df['BIS Over Due'].notna() & (master_df['BIS Over Due'] != 0)].copy()
+
+        elif st.session_state.filter_type == "Current Month":
+            st.subheader("📅 List: BIS Current Month Due")
+            pending_list = master_df[master_df['BIS Current Month Due'].notna() & (master_df['BIS Current Month Due'] != 0)].copy()
+
+        elif st.session_state.filter_type == "Next Month":
+            st.subheader("🗓️ List: BIS Next Month Due")
+            pending_list = master_df[master_df['BIS Next Month Due'].notna() & (master_df['BIS Next Month Due'] != 0)].copy()
+
+        # Display Result
         if not pending_list.empty:
-            st.warning(f"Total {len(pending_list)} machines ki service due hai.")
+            st.write(f"Total Records Found: **{len(pending_list)}**")
             
-            # Export Button
-            st.download_button("📥 Download Full Pending List (Excel)", to_excel(pending_list), f"Detailed_Pending_List.xlsx")
+            # Download Button
+            st.download_button("📥 Download This List (Excel)", to_excel(pending_list), f"BIS_{st.session_state.filter_type}_List.xlsx")
             
-            # Table Display ke liye columns select karna
-            display_cols = ['CUSTOMER NAME', 'Fabrication No', 'HMR Cal.'] + check_cols
+            # Display Columns
+            check_cols = ['OIL DUE DATE', 'AFC DUE DATE', 'AFE DUE DATE', 'AOS DUE DATE', '1500 KIT DUE DATE', '3000 KIT DUE DATE']
+            display_cols = ['CUSTOMER NAME', 'Fabrication No', 'Contact No. 1'] + check_cols
+            
+            # Formatting and Display
             display_df = pending_list[display_cols].copy()
-            
-            # Dates ko format karna (dd-mmm-yy)
             for col in check_cols:
                 display_df[col] = display_df[col].apply(format_dt)
             
-            # Table show karna
-            st.dataframe(display_df.sort_values(by='CUSTOMER NAME'), use_container_width=True)
-            
-            st.info("💡 Tip: Aap table ke headers par click karke kisi bhi column ko sort (Date wise) kar sakte hain.")
+            st.dataframe(display_df, use_container_width=True)
+        elif st.session_state.filter_type is not None:
+            st.info(f"Is category ({st.session_state.filter_type}) mein koi data nahi mila.")
         else:
-            st.success(f"Agle {days_to_check} dinon mein koi service pending nahi hai!")
-   
+            st.info("Upar diye gaye buttons mein se ek select karein list dekhne ke liye.")
