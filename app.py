@@ -64,22 +64,57 @@ def to_excel(df):
 def create_pdf(title, info_dict, table_df=None):
     buffer = BytesIO()
     p = canvas.Canvas(buffer, pagesize=letter)
+    width, height = letter
+    
+    # --- Header Section ---
     p.setFont("Helvetica-Bold", 16)
-    p.drawString(50, 750, title)
+    p.drawString(50, height - 50, title)
+    
     p.setFont("Helvetica", 10)
-    y = 730
+    y = height - 70
     for key, val in info_dict.items():
         p.drawString(50, y, f"{key}: {val}")
         y -= 15
+    
     p.line(50, y, 550, y)
-    y -= 20
-    if table_df is not None:
-        p.drawString(50, y, "Recent Records:")
+    y -= 25
+    
+    # --- Table Section ---
+    if table_df is not None and not table_df.empty:
+        p.setFont("Helvetica-Bold", 11)
+        p.drawString(50, y, "Detailed List:")
         y -= 20
-        for _, row in table_df.head(10).iterrows():
-            p.drawString(60, y, f"- {row.iloc[0]} | {row.iloc[1]}")
+        
+        # Table Headers Setup
+        p.setFont("Helvetica-Bold", 9)
+        cols = table_df.columns.tolist()
+        # Sirf pehle 5-6 columns hi PDF mein fit aayenge
+        display_cols = cols[:6] 
+        
+        x_start = 50
+        for col in display_cols:
+            p.drawString(x_start, y, str(col)[:15]) # Column name truncate for space
+            x_start += 85
+        
+        y -= 15
+        p.line(50, y+10, 550, y+10)
+        
+        # Table Rows
+        p.setFont("Helvetica", 8)
+        for _, row in table_df.iterrows():
+            if y < 50: # Agar page bhar jaye toh naya page shuru karein
+                p.showPage()
+                p.setFont("Helvetica", 8)
+                y = height - 50
+            
+            x_val = 50
+            for col in display_cols:
+                val = str(row[col])
+                if len(val) > 18: val = val[:15] + ".." # Lambe text ko chhota karein
+                p.drawString(x_val, y, val)
+                x_val += 85
             y -= 15
-            if y < 50: break
+    
     p.showPage()
     p.save()
     return buffer.getvalue()
