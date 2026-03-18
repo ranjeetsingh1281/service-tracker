@@ -119,7 +119,7 @@ if master_df is not None:
             with c1:
                 st.info("📋 Machine Info")
                 st.write(f"**Customer:** {m_info.get('CUSTOMER NAME', 'N/A')}")
-                st.write(f"**Model:** {m_info.get('Model', 'N/A')}")
+                st.write(f"**Model:** {m_info.get('MODEL', 'N/A')}")
                 st.write(f"**Avg. Running Hrs:** {m_info.get('Avg. Hrs', 'N/A')} 👈")
                 st.write(f"**Calculated Avg Hrs:** {m_info.get('HMR Cal.', 'N/A')} 👈")
                 st.write(f"**Last Call HMR:** {m_info.get('Last Call HMR', 'N/A')}")
