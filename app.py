@@ -240,44 +240,28 @@ if master_df is not None:
             st.info(f"Is category ({st.session_state.filter_type}) mein koi data nahi mila.")
         else:
             st.info("Upar diye gaye buttons mein se ek select karein list dekhne ke liye.")
-# --- SECTION 3: SERVICE HISTORY (WITH CALL TYPE FIX) ---
-        st.divider()
-        st.subheader("🕒 Service History (Newest First)")
-        
-        # 1. Sabse pehle service_df ke columns ke extra spaces saaf karein
-        service_df.columns = service_df.columns.str.strip()
-        
-        # 2. Filter karein fabrication number ke basis par
-        history = service_df[service_df['Fabrication Number'] == selected_fab].copy()
-        history = history.sort_values(by='Call Logged Date', ascending=False)
-        
-        if not history.empty:
-            for index, row in history.iterrows():
-                # Date format karein
-                d_str = format_dt(row['Call Logged Date'])
-                
-                # Column names ko variable mein lein taaki koi error na aaye
-                c_type = row.get('Call Type', 'N/A')
-                c_hmr = row.get('Call HMR', 'N/A')
-                c_status = row.get('Call Status', 'N/A')
-                c_track = row.get('Call Tracking Number', 'N/A')
-                c_eng = row.get('Service Engineer', 'N/A')
-                c_comment = row.get('Service Engineer Comments', 'No comments available.')
-
-                # Header String
-                header_text = f"📅 {d_str} | ⚙️ {c_hmr} HMR | 🛠️ {c_type}"
-                
-                with st.expander(header_text):
-                    h_col1, h_col2 = st.columns(2)
-                    with h_col1:
-                        st.write(f"**Tracking No:** {c_track}")
-                        st.write(f"**Status:** {c_status}")
-                    with h_col2:
-                        st.write(f"**Engineer:** {c_eng}")
-                        st.write(f"**Call Type:** {c_type}") # Yahan bhi check ke liye dikhayega
+# --- UPDATED SERVICE HISTORY (WITH CALL TYPE FIX) ---
+            st.divider()
+            st.subheader("🕒 Service History")
+            if not history.empty:
+                for _, row in history.iterrows():
+                    # Finding Call Type with fallback
+                    call_type_display = row.get('Call Type', row.get('Call_Type', 'N/A'))
+                    dt_display = format_dt(row['Call Logged Date'])
+                    hmr_display = row.get('Call HMR', 'N/A')
                     
-                    st.markdown("---")
-                    st.write("**Service Engineer Comments:**")
-                    st.info(c_comment)
-        else:
-            st.warning("Is machine ki koi service history nahi mili.")
+                    header = f"📅 {dt_display} | ⚙️ {hmr_display} HMR | 🛠️ {call_type_display}"
+                    with st.expander(header):
+                        st.write(f"**Type:** {call_type_display}")
+                        st.write(f"**Engineer:** {row.get('Service Engineer', 'N/A')}")
+                        st.info(f"**Comments:** {row.get('Service Engineer Comments', 'N/A')}")
+            else:
+                st.warning("No records found.")
+
+    elif page == "Service Pending List":
+        st.title("⏳ Service Pending List")
+        # Reuse existing Pending logic here...
+        st.write("Upar wala pending logic yahan paste karein.")
+
+else:
+    st.error("Excel files missing on GitHub!")
