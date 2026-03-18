@@ -192,15 +192,15 @@ if master_df is not None:
             st.session_state.filter_type = None
 
         with btn_col1:
-            if st.button("🔴 1. BIS Over Due", use_container_width=True):
+            if st.button("🔴 1. Over Due", use_container_width=True):
                 st.session_state.filter_type = "Over Due"
         
         with btn_col2:
-            if st.button("🟡 2. BIS Current Month Due", use_container_width=True):
+            if st.button("🟡 2. Current Month Due", use_container_width=True):
                 st.session_state.filter_type = "Current Month"
         
         with btn_col3:
-            if st.button("🟢 3. BIS Next Month Due", use_container_width=True):
+            if st.button("🟢 3. Next Month Due", use_container_width=True):
                 st.session_state.filter_type = "Next Month"
 
         # Logic to filter based on button click
