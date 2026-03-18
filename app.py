@@ -164,8 +164,12 @@ if page == "Machine Tracker":
         with c1:
             st.info("📋 Customer Info")
             st.write(f"**Customer:** {m_info.get('CUSTOMER NAME')}")
-            st.write(f"**HMR Cal:** {curr_hmr}")
-            st.write(f"**Due Remarks:** {m_info.get('Due remarks', 'N/A')}")
+            st.write(f"**Model:** {m_info.get('MODEL', 'N/A')}")
+            st.write(f"**Avg. Running Hrs:** {m_info.get('Avg. Hrs', 'N/A')} 👈")
+            st.write(f"**Calculated Avg Hrs:** {m_info.get('HMR Cal.', 'N/A')} 👈")
+            st.write(f"**Last Call HMR:** {m_info.get('Last Call HMR', 'N/A')}")
+            st.write(f"**Last Call HMR Date:** {format_dt(m_info.get('Last Call HMR Date'))}")
+            st.write(f"**Since Last Service:** {int(elapsed)} Hrs 🛠️")
         with c2:
             st.info("📅 Replacement")
             st.write(f"**Oil R-Date:** {format_dt(m_info.get('Oil Replacement Date'))}")
