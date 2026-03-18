@@ -65,8 +65,15 @@ if page == "Machine Tracker":
     customer_list = sorted(master_df['CUSTOMER NAME'].unique().astype(str))
     selected_customer = st.sidebar.selectbox("1. Customer Select Karein", options=["All"] + customer_list)
     
-    filtered_df = master_df if selected_customer == "All" else master_df[master_df['CUSTOMER NAME'] == selected_customer]
-    selected_fab = st.sidebar.selectbox("2. Fabrication No Select Karein", options=["Select"] + sorted(filtered_df['Fabrication No'].astype(str).unique()))
+    if selected_customer != "All Customers":
+            filtered_df = master_df[master_df['CUSTOMER NAME'] == selected_customer].copy()
+            st.subheader(f"📊 Summary: {selected_customer}")
+            m1, m2, m3 = st.columns(3)
+            out_count = len(filtered_df[filtered_df['Warranty Type'].str.contains('Non', na=False, case=False)])
+            m1.metric("Total Machines", len(filtered_df))
+            m2.metric("In Warranty", len(filtered_df) - out_count)
+            m3.metric("Out of Warranty", out_count)
+            st.divider()
 
     if selected_fab != "Select":
         m_info = filtered_df[filtered_df['Fabrication No'].astype(str) == selected_fab].iloc[0]
@@ -77,6 +84,11 @@ if page == "Machine Tracker":
         # Elapsed logic: Aaj ka HMR - Pichla Service HMR
         elapsed = curr_hmr - last_hmr if pd.notna(curr_hmr) and pd.notna(last_hmr) and curr_hmr > last_hmr else 0
 
+         # --- SECTION 1: MACHINE HEADER ---
+            st.divider()
+            st.subheader(f"🛡️ Obligation: {m_info.get('Warranty Type', 'N/A')}")
+            st.write(f"📅 **Warranty Start:** {format_dt(m_info.get('Warranty Start Date'))} | **End:** {format_dt(m_info.get('Warranty End date'))}")
+        
         # --- DISPLAY C1 to C4 ---
         st.divider()
         c1, c2, c3, c4 = st.columns(4)
@@ -87,7 +99,7 @@ if page == "Machine Tracker":
             st.write(f"**Calculated Avg Hrs:** {m_info.get('HMR Cal.', 'N/A')}")
             st.write(f"**Last Call HMR:** {m_info.get('Last Call HMR', 'N/A')}")
             st.write(f"**Last Call Date:** {format_dt(m_info.get('Last Call HMR Date'))}")
-            st.write(f"**Due Remarks:** {m_info.get('Due remarks', 'N/A')}")
+            st.write(f"**Since Last Service:** {int(elapsed)} Hrs 🛠️")
 
         with c2:
             st.info("📅 Replacement Dates")
@@ -102,7 +114,7 @@ if page == "Machine Tracker":
             st.write(f"**3000 Kit R-Date:** {format_dt(m_info.get('3000 Valve kit Replaced Date'))}")
 
         with c3:
-            st.info("⚙️ Live Remaining Hrs")
+            st.info("⚙️ Live Remaining")
             rem_mapping = {
                 'HMR - Oil remaining': 'Oil',
                 'Air filter replaced - Compressor Remaining Hours': 'AFC',
@@ -127,16 +139,7 @@ if page == "Machine Tracker":
             labels = ['Oil', 'AFC', 'AFE', 'MOF', 'ROF', 'AOS', 'Greasing', '1500 Kit', '3000 Kit']
             for col, label in zip(due_cols, labels):
                 st.write(f"**{label} Due:** {format_dt(m_info.get(col))}")
-
-        # --- FOC FOR SPECIFIC MACHINE ---
-        st.divider()
-        st.subheader("🎁 FOC Parts for this Machine")
-        f_col = 'FABRICATION NO' if 'FABRICATION NO' in foc_df.columns else 'FABRICATION NO.'
-        foc_match = foc_df[foc_df[f_col].astype(str) == selected_fab].copy()
-        if not foc_match.empty:
-            st.dataframe(foc_match[['Failure Material Details', 'Part Code', 'Qty', 'ELGI IVOICE NO.']], use_container_width=True, hide_index=True)
-        else: st.info("No FOC record.")
-
+   
         # --- SERVICE HISTORY ---
         st.divider()
         st.subheader("🕒 Service History")
@@ -147,7 +150,16 @@ if page == "Machine Tracker":
                 with st.expander(header):
                     st.write(f"**Engineer:** {row.get('Service Engineer', 'N/A')}")
                     st.info(row.get('Service Engineer Comments', 'N/A'))
-
+                    
+         # --- FOC FOR SPECIFIC MACHINE ---
+        st.divider()
+        st.subheader("🎁 FOC Parts for this Machine")
+        f_col = 'FABRICATION NO' if 'FABRICATION NO' in foc_df.columns else 'FABRICATION NO.'
+        foc_match = foc_df[foc_df[f_col].astype(str) == selected_fab].copy()
+        if not foc_match.empty:
+            st.dataframe(foc_match[['Failure Material Details', 'Part Code', 'Qty', 'FOC Status', 'ELGI IVOICE NO.']], use_container_width=True, hide_index=True)
+        else: st.info("No FOC record.")
+            
 # --- 2. FOC TRACKER LIST (DETAILED) ---
 elif page == "FOC Tracker List":
     st.title("📦 Master FOC Tracker List")
@@ -156,9 +168,9 @@ elif page == "FOC Tracker List":
     # User requested 14 Columns
     foc_cols = [
         'Created On', 'FOC Number', 'Call Tracking Number', 'Customer Name', 
-        'FOC Type', 'FOC Category', 'FOC Status', 'DEALER INVOICE NO./ DATE', 
-        'Failure Material Details', 'Part Code', 'Qty', 'ELGI IVOICE NO.', 
-        'AO Number', 'LR Number'
+        'FOC Type', 'FOC Status', 'DEALER INVOICE NO./ DATE', 'Part Code',
+        'Failure Material Details',  'Qty', 'ELGI IVOICE NO.', 
+        'LR Number'
     ]
     
     # Filter only available columns from the list
