@@ -114,14 +114,27 @@ if master_df is not None:
             c1, c2, c3, c4 = st.columns(4)
             with c1:
                 st.info("📋 Info")
-                st.write(f"**Customer:** {m_info.get('CUSTOMER NAME')}")
+                st.write(f"**Customer:** {m_info.get('CUSTOMER NAME', 'N/A')}")
+                st.write(f"**Address:** {m_info.get('Address', 'N/A')}")
+                st.write(f"**Category:** {m_info.get('Category', 'N/A')}")
+                st.write(f"**Avg. Running Hrs:** {m_info.get('Avg. Hrs', 'N/A')} 👈")
+                st.write(f"**Calculated Avg Hrs:** {m_info.get('HMR Cal.', 'N/A')} 👈")
+                st.write(f"**Due Remarks:** {m_info.get('Due remarks', 'N/A')}")
+                st.write(f"**Last Call HMR:** {m_info.get('Last Call HMR', 'N/A')}")
+                st.write(f"**Last Call HMR Date:** {format_dt(m_info.get('Last Call HMR Date'))}")
                 st.write(f"**Current HMR:** {current_hmr}")
                 st.write(f"**Since Last Service:** {int(elapsed)} Hrs")
             with c2:
                 st.info("📅 Replacement")
                 st.write(f"**Oil R-Date:** {format_dt(m_info.get('Oil Replacement Date'))}")
                 st.write(f"**AFC R-Date:** {format_dt(m_info.get('Air filter Compressor Replaced Date'))}")
+                st.write(f"**AFE R-Date:** {format_dt(m_info.get('Air filter Engine Replaced Date'))}")
+                st.write(f"**MOF R-Date:** {format_dt(m_info.get('Main Oil filter Replaced Date'))}")
+                st.write(f"**ROF R-Date:** {format_dt(m_info.get('Return Oil filter Replaced Date'))}")
                 st.write(f"**AOS R-Date:** {format_dt(m_info.get('AOS Replaced Date'))}")
+                st.write(f"**Greasing R-Date:** {format_dt(m_info.get('Greasing Done Date'))}")
+                st.write(f"**1500 Kit R-Date:** {format_dt(m_info.get('1500 Valve kit Replaced Date'))}")
+                st.write(f"**3000 Kit R-Date:** {format_dt(m_info.get('3000 Valve kit Replaced Date'))}")
             with c3:
                 st.info("⚙️ Live Remaining")
                 rem_cols = {
@@ -135,8 +148,15 @@ if master_df is not None:
             with c4:
                 st.error("🚨 DUE DATES")
                 st.write(f"**Oil Due:** {format_dt(m_info.get('OIL DUE DATE'))}")
+                st.write(f"**Oil Due:** {format_dt(m_info.get('OIL DUE DATE'))}")
                 st.write(f"**AFC Due:** {format_dt(m_info.get('AFC DUE DATE'))}")
+                st.write(f"**AFE Due:** {format_dt(m_info.get('AFE DUE DATE'))}")
+                st.write(f"**MOF Due:** {format_dt(m_info.get('MOF DUE DATE'))}")
+                st.write(f"**ROF Due:** {format_dt(m_info.get('ROF DUE DATE'))}")
                 st.write(f"**AOS Due:** {format_dt(m_info.get('AOS DUE DATE'))}")
+                st.write(f"**Greasing Due:** {format_dt(m_info.get('RGT DUE DATE'))}")
+                st.write(f"**1500 Kit Due:** {format_dt(m_info.get('1500 KIT DUE DATE'))}")
+                st.write(f"**3000 Kit Due:** {format_dt(m_info.get('3000 KIT DUE DATE'))}")
 
             st.divider()
             st.subheader("🕒 Service History")
@@ -161,11 +181,17 @@ if master_df is not None:
         pending_list = master_df[
             (master_df['OIL DUE DATE'] <= future_date) | 
             (master_df['AFC DUE DATE'] <= future_date) |
-            (master_df['AOS DUE DATE'] <= future_date)
+            (master_df['AFE DUE DATE'] <= future_date) |
+            (master_df['MOF DUE DATE'] <= future_date) |
+            (master_df['ROF DUE DATE'] <= future_date) |
+            (master_df['AOS DUE DATE'] <= future_date) |
+            (master_df['RGT DUE DATE'] <= future_date) |
+            (master_df['1500 KIT DUE DATE'] <= future_date) |
+            (master_df['3000 KIT DUE DATE'] <= future_date)
         ].copy()
 
         # Remove rows where all relevant due dates are missing
-        pending_list = pending_list.dropna(subset=['OIL DUE DATE', 'AFC DUE DATE', 'AOS DUE DATE'], how='all')
+        pending_list = pending_list.dropna(subset=['OIL DUE DATE', 'AFC DUE DATE','AFE DUE DATE', 'MOF DUE DATE', 'ROF DUE DATE', 'AOS DUE DATE', 'RGT DUE DATE', '1500 KIT DUE DATE', '3000 KIT DUE DATE'], how='all')
 
         if not pending_list.empty:
             st.warning(f"Total {len(pending_list)} machines ki service due hai (Next {days_to_check} days).")
