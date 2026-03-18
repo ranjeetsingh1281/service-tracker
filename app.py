@@ -240,36 +240,44 @@ if master_df is not None:
             st.info(f"Is category ({st.session_state.filter_type}) mein koi data nahi mila.")
         else:
             st.info("Upar diye gaye buttons mein se ek select karein list dekhne ke liye.")
-# --- SECTION 3: SERVICE HISTORY ---
+# --- SECTION 3: SERVICE HISTORY (WITH CALL TYPE FIX) ---
         st.divider()
         st.subheader("🕒 Service History (Newest First)")
         
-        # Filtering Service_Detail
+        # 1. Sabse pehle service_df ke columns ke extra spaces saaf karein
+        service_df.columns = service_df.columns.str.strip()
+        
+        # 2. Filter karein fabrication number ke basis par
         history = service_df[service_df['Fabrication Number'] == selected_fab].copy()
         history = history.sort_values(by='Call Logged Date', ascending=False)
         
         if not history.empty:
             for index, row in history.iterrows():
-                # Date formatting
+                # Date format karein
                 d_str = format_dt(row['Call Logged Date'])
                 
-                # Header mein Call Type add kiya gaya hai
-                call_type = row.get('Call Type', 'N/A')
-                hmr_val = row.get('Call HMR', 'N/A')
-                
-                header_text = f"📅 {d_str} | ⚙️ {hmr_val} HMR | 🛠️ {call_type}"
+                # Column names ko variable mein lein taaki koi error na aaye
+                c_type = row.get('Call Type', 'N/A')
+                c_hmr = row.get('Call HMR', 'N/A')
+                c_status = row.get('Call Status', 'N/A')
+                c_track = row.get('Call Tracking Number', 'N/A')
+                c_eng = row.get('Service Engineer', 'N/A')
+                c_comment = row.get('Service Engineer Comments', 'No comments available.')
+
+                # Header String
+                header_text = f"📅 {d_str} | ⚙️ {c_hmr} HMR | 🛠️ {c_type}"
                 
                 with st.expander(header_text):
-                    col_h1, col_h2 = st.columns(2)
-                    with col_h1:
-                        st.write(f"**Tracking No:** {row.get('Call Tracking Number', 'N/A')}")
-                        st.write(f"**Call Status:** {row.get('Call Status', 'N/A')}")
-                    with col_h2:
-                        st.write(f"**Service Engineer:** {row.get('Service Engineer', 'N/A')}")
-                        st.write(f"**Customer:** {row.get('Customer', 'N/A')}")
+                    h_col1, h_col2 = st.columns(2)
+                    with h_col1:
+                        st.write(f"**Tracking No:** {c_track}")
+                        st.write(f"**Status:** {c_status}")
+                    with h_col2:
+                        st.write(f"**Engineer:** {c_eng}")
+                        st.write(f"**Call Type:** {c_type}") # Yahan bhi check ke liye dikhayega
                     
-                    st.write("**Engineer Comments:**")
-                    # Wrapped text info box mein
-                    st.info(row.get('Service Engineer Comments', 'No comments available.'))
+                    st.markdown("---")
+                    st.write("**Service Engineer Comments:**")
+                    st.info(c_comment)
         else:
-            st.warning("Is Fabrication Number ke liye koi service history nahi mili.")
+            st.warning("Is machine ki koi service history nahi mili.")
