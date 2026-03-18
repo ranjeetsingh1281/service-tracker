@@ -179,28 +179,54 @@ if master_df is not None:
                         st.info(row.get('Service Engineer Comments', 'No comments.'))
             else: st.warning("No history found.")
         else: st.info("👈 Sidebar se Customer aur Machine select karein.")
-
-    # --- SECTION 2: SERVICE PENDING LIST ---
+# --- SECTION 2: SERVICE PENDING LIST (DETAILED) ---
     elif page == "Service Pending List":
         st.title("⏳ Service Pending Dashboard")
-        days = st.select_slider("Select Days:", options=[7, 15, 30, 60, 90, 180], value=30)
-        today = pd.Timestamp.now().normalize()
-        future = today + pd.Timedelta(days=days)
+        st.markdown("Niche di gayi list un machines ki hai jinki service agle kuch dino mein due hone wali hai.")
         
-        # Multiple columns check for pending
+        # Filter Days Selection
+        days_to_check = st.select_slider(
+            "Kitne dinon ki pending list dekhni hai?",
+            options=[7, 15, 30, 60, 90, 180],
+            value=30
+        )
+
+        today = pd.Timestamp.now().normalize()
+        future_date = today + pd.Timedelta(days=days_to_check)
+        
+        # Sabhi 6 columns par filter lagana
         pending_list = master_df[
-            (master_df['OIL DUE DATE'] <= future) | (master_df['AFC DUE DATE'] <= future) |
-            (master_df['AOS DUE DATE'] <= future) | (master_df['3000 KIT DUE DATE'] <= future)
-        ].copy().dropna(subset=['OIL DUE DATE', 'AFC DUE DATE', 'AOS DUE DATE'], how='all')
+            (master_df['OIL DUE DATE'] <= future_date) | 
+            (master_df['AFC DUE DATE'] <= future_date) |
+            (master_df['AFE DUE DATE'] <= future_date) |
+            (master_df['AOS DUE DATE'] <= future_date) |
+            (master_df['1500 KIT DUE DATE'] <= future_date) |
+            (master_df['3000 KIT DUE DATE'] <= future_date)
+        ].copy()
+
+        # Jo dates purani hain (Overdue) unhe bhi handle karega
+        # Data clean karein (Jinki sabhi dates khali hain unhe hatayein)
+        check_cols = ['OIL DUE DATE', 'AFC DUE DATE', 'AFE DUE DATE', 'AOS DUE DATE', '1500 KIT DUE DATE', '3000 KIT DUE DATE']
+        pending_list = pending_list.dropna(subset=check_cols, how='all')
 
         if not pending_list.empty:
-            st.warning(f"Total {len(pending_list)} machines pending in next {days} days.")
-            st.download_button("📥 Download Excel", to_excel(pending_list), "Pending_List.xlsx")
-            display_df = pending_list[['CUSTOMER NAME', 'Fabrication No', 'OIL DUE DATE', 'AFC DUE DATE', 'AOS DUE DATE', 'HMR Cal.']].copy()
-            for col in ['OIL DUE DATE', 'AFC DUE DATE', 'AOS DUE DATE']:
+            st.warning(f"Total {len(pending_list)} machines ki service due hai.")
+            
+            # Export Button
+            st.download_button("📥 Download Full Pending List (Excel)", to_excel(pending_list), f"Detailed_Pending_List.xlsx")
+            
+            # Table Display ke liye columns select karna
+            display_cols = ['CUSTOMER NAME', 'Fabrication No', 'HMR Cal.'] + check_cols
+            display_df = pending_list[display_cols].copy()
+            
+            # Dates ko format karna (dd-mmm-yy)
+            for col in check_cols:
                 display_df[col] = display_df[col].apply(format_dt)
-            st.dataframe(display_df.sort_values(by='OIL DUE DATE'), use_container_width=True)
-        else: st.success("No pending services found!")
-
-else:
-    st.error("Excel files missing on GitHub!")
+            
+            # Table show karna
+            st.dataframe(display_df.sort_values(by='CUSTOMER NAME'), use_container_width=True)
+            
+            st.info("💡 Tip: Aap table ke headers par click karke kisi bhi column ko sort (Date wise) kar sakte hain.")
+        else:
+            st.success(f"Agle {days_to_check} dinon mein koi service pending nahi hai!")
+   
