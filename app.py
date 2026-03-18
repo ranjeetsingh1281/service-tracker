@@ -240,31 +240,6 @@ if master_df is not None:
             st.info(f"Is category ({st.session_state.filter_type}) mein koi data nahi mila.")
         else:
             st.info("Upar diye gaye buttons mein se ek select karein list dekhne ke liye.")
-# --- UPDATED SERVICE HISTORY (WITH CALL TYPE FIX) ---
-            st.divider()
-            st.subheader("🕒 Service History")
-            if not history.empty:
-                for _, row in history.iterrows():
-                    # Finding Call Type with fallback
-                    call_type_display = row.get('Call Type', row.get('Call_Type', 'N/A'))
-                    dt_display = format_dt(row['Call Logged Date'])
-                    hmr_display = row.get('Call HMR', 'N/A')
-                    
-                    header = f"📅 {dt_display} | ⚙️ {hmr_display} HMR | 🛠️ {call_type_display}"
-                    with st.expander(header):
-                        st.write(f"**Type:** {call_type_display}")
-                        st.write(f"**Engineer:** {row.get('Service Engineer', 'N/A')}")
-                        st.info(f"**Comments:** {row.get('Service Engineer Comments', 'N/A')}")
-            else:
-                st.warning("No records found.")
-
-    elif page == "Service Pending List":
-        st.title("⏳ Service Pending List")
-        # Reuse existing Pending logic here...
-        st.write("Upar wala pending logic yahan paste karein.")
-
-else:
-    st.error("Excel files missing on GitHub!")
 # --- SERVICE HISTORY SECTION ---
             st.divider()
             st.subheader("🕒 Service History")
