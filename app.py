@@ -265,3 +265,27 @@ if master_df is not None:
 
 else:
     st.error("Excel files missing on GitHub!")
+# --- SERVICE HISTORY SECTION ---
+            st.divider()
+            st.subheader("🕒 Service History")
+            if not history.empty:
+                for _, row in history.iterrows():
+                    # Using the new helper function to find Call Type
+                    c_type = get_col_val(row, 'Call Type')
+                    c_hmr = row.get('Call HMR', 'N/A')
+                    c_dt = format_dt(row.get('Call Logged Date'))
+                    
+                    with st.expander(f"📅 {c_dt} | ⚙️ {c_hmr} HMR | 🛠️ {c_type}"):
+                        st.write(f"**Call Type:** {c_type}")
+                        st.write(f"**Engineer:** {get_col_val(row, 'Service Engineer')}")
+                        st.info(f"**Comments:** {get_col_val(row, 'Service Engineer Comments')}")
+            else:
+                st.warning("No records found.")
+
+    elif page == "Service Pending List":
+        st.title("⏳ Service Pending Dashboard")
+        # Pending buttons logic remains same...
+        st.write("Buttons use karein.")
+
+else:
+    st.error("Excel files missing!")
