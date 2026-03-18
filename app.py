@@ -92,7 +92,7 @@ if page == "Machine Tracker":
         
         # Matching fabrication no in FOC file (using headers from your file)
         # Using FABRICATION NO. (with dot) as seen in your CSV snippet
-        foc_match = foc_df[foc_df['FABRICATION NO.'].astype(str) == selected_fab].copy()
+        foc_match = foc_df[foc_df['FABRICATION NO'].astype(str) == selected_fab].copy()
         
         if not foc_match.empty:
             # Columns requested by you
