@@ -110,7 +110,14 @@ if page == "Machine Tracker":
         with c2:
             st.info("📅 Replacement")
             st.write(f"**Oil R-Date:** {format_dt(m_info.get('Oil Replacement Date'))}")
+            st.write(f"**AFC R-Date:** {format_dt(m_info.get('Air filter Compressor Replaced Date'))}")
+            st.write(f"**AFE R-Date:** {format_dt(m_info.get('Air filter Engine Replaced Date'))}")
+            st.write(f"**MOF R-Date:** {format_dt(m_info.get('Main Oil filter Replaced Date'))}")
+            st.write(f"**ROF R-Date:** {format_dt(m_info.get('Return Oil filter Replaced Date'))}")
             st.write(f"**AOS R-Date:** {format_dt(m_info.get('AOS Replaced Date'))}")
+            st.write(f"**Greasing R-Date:** {format_dt(m_info.get('Greasing Done Date'))}")
+            st.write(f"**1500 Kit R-Date:** {format_dt(m_info.get('1500 Valve kit Replaced Date'))}")
+            st.write(f"**3000 Kit R-Date:** {format_dt(m_info.get('3000 Valve kit Replaced Date'))}")
         with c3:
             st.info("⚙️ Live Remaining")
             # Safe remaining calculation
