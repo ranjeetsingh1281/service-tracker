@@ -43,17 +43,17 @@ master_df, master_od_df, service_df, foc_df, errors = load_data()
 
 # --- SIDEBAR NAVIGATION ---
 st.sidebar.title("📌 Navigation")
-main_menu = st.sidebar.radio("Main Section:", ["Standard Data (Master_Data)", "OD Data (Master_OD_Data)"])
+main_menu = st.sidebar.radio("Main Section:", ["DPSAC Tracker", "INDUATIAL Tracker"])
 
-if main_menu == "Standard Data (Master_Data)":
+if main_menu == "DPSAC Tracker":
     page = st.sidebar.selectbox("Standard Dashboard:", ["Machine Tracker", "FOC List", "Service Pending"])
 else:
     page = st.sidebar.selectbox("OD Dashboard:", ["Machine Tracker", "FOC List", "Service Pending"])
 
 # --- 1. STANDARD DATA SECTION ---
-if main_menu == "Standard Data (Master_Data)":
+if main_menu == "DPSAC Tracker":
     if page == "Machine Tracker":
-        st.title("🛠️ Standard Machine Tracker")
+        st.title("🛠️ DPSAC Units Tracker")
         cust_list = sorted(master_df['CUSTOMER NAME'].unique().astype(str))
         sel_cust = st.sidebar.selectbox("Customer", options=["All"] + cust_list, key="std_cust")
         df_f = master_df if sel_cust == "All" else master_df[master_df['CUSTOMER NAME'] == sel_cust]
@@ -66,23 +66,23 @@ if main_menu == "Standard Data (Master_Data)":
             # [Yahan C1-C4 ka Standard wala code rahega]
 
     elif page == "FOC List":
-        st.title("📦 Standard FOC Tracker List")
-        # Filters only for Standard Fabrication Numbers
+        st.title("📦 DPSAC FOC Tracker List")
+        # Filters only for DPSAC Fabrication Numbers
         std_fabs = master_df['Fabrication No'].astype(str).unique()
         f_std = foc_df[foc_df['FABRICATION NO'].astype(str).isin(std_fabs)]
         st.dataframe(f_std, use_container_width=True)
 
     elif page == "Service Pending":
-        st.title("⏳ Standard Service Pending")
+        st.title("⏳ DPSAC Service Pending")
         b1, b2, b3 = st.columns(3)
         if b1.button("🔴 Overdue"): st.dataframe(master_df[master_df['BIS Over Due'] != 0])
         if b2.button("🟡 Current Month"): st.dataframe(master_df[master_df['BIS Current Month Due'] != 0])
         if b3.button("🟢 Next Month"): st.dataframe(master_df[master_df['BIS Next Month Due'] != 0])
 
 # --- 2. OD DATA SECTION ---
-elif main_menu == "OD Data (Master_OD_Data)":
+elif main_menu == "INDUATIAL Tracker":
     if page == "Machine Tracker":
-        st.title("🛡️ OD Machine Tracker")
+        st.title("🛡️ INDUATRIAL Tracker")
         cust_list_od = sorted(master_od_df['Customer Name'].unique().astype(str))
         sel_cust_od = st.sidebar.selectbox("Customer", options=["All"] + cust_list_od, key="od_cust")
         df_od_f = master_od_df if sel_cust_od == "All" else master_od_df[master_od_df['Customer Name'] == sel_cust_od]
@@ -94,13 +94,13 @@ elif main_menu == "OD Data (Master_OD_Data)":
             st.success(f"Viewing OD Machine: {sel_fab_od}")
 
     elif page == "FOC List":
-        st.title("📦 OD FOC Tracker List")
+        st.title("📦 INDUATRIAL FOC Tracker List")
         od_fabs = master_od_df['Fabrication No'].astype(str).unique()
         f_od = foc_df[foc_df['FABRICATION NO'].astype(str).isin(od_fabs)]
         st.dataframe(f_od, use_container_width=True)
 
     elif page == "Service Pending":
-        st.title("⏳ OD Service Pending")
+        st.title("⏳ INDUATRIAL Service Pending")
         o1, o2, o3 = st.columns(3)
         if o1.button("🔴 Red Count (Overdue)"): st.dataframe(master_od_df[master_od_df['Red Count'] != 0])
         if o2.button("🟡 Yellow Count (Current)"): st.dataframe(master_od_df[master_od_df['Yellow Count'] != 0])
