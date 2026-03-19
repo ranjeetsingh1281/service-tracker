@@ -126,13 +126,11 @@ if page == "Machine Tracker":
             st.info("📋 Customer Info")
             st.write(f"**Customer:** {m_info.get('CUSTOMER NAME')}")
             st.write(f"**Location:** {m_info.get('LOCATION', 'N/A')}")
-            st.write(f"**Contact:** {m_info.get('CONTACT NO.', 'N/A')}")
             st.write(f"**Model:** {m_info.get('MODEL', 'N/A')}")
             st.write(f"**Sl No:** {m_info.get('SL NO.', 'N/A')}")
             st.write(f"**Category:** {m_info.get(cat_col, 'N/A')}")
+            st.write(f"**Engineer:** {m_info.get('Service Engineer', 'N/A')}")
             st.write(f"**HMR Cal:** {curr_hmr}")
-            st.write(f"**Last Service Date:** {format_dt(m_info.get('Last Call HMR Date'))}")
-            
         with c2:
             st.info("📅 Replacement (9 Parts)")
             for p, cls in parts_map.items(): st.write(f"**{p}:** {format_dt(m_info.get(cls['date']))}")
@@ -148,23 +146,31 @@ if page == "Machine Tracker":
 
         st.divider()
         ex1, ex2 = st.columns(2)
-        ex1.download_button("📊 Export History (Excel)", to_excel(history), f"History_{selected_fab}.xlsx")
+        ex1.download_button("📊 Export Excel", to_excel(history), f"History_{selected_fab}.xlsx")
         ex2.download_button("📄 Export Report (PDF)", create_pdf("Report", {"Fab": selected_fab, "Customer": m_info.get('CUSTOMER NAME')}, history), f"Report_{selected_fab}.pdf")
 
-        # FOC & History sections (unchanged)
-        st.divider(); st.subheader("🎁 FOC Parts")
+        # FOC
+        st.divider(); st.subheader("🎁 FOC Parts History")
         f_col = 'FABRICATION NO' if 'FABRICATION NO' in foc_df.columns else 'FABRICATION NO.'
         foc_match = foc_df[foc_df[f_col].astype(str) == selected_fab].copy()
         if not foc_match.empty: st.dataframe(foc_match[['Failure Material Details', 'Part Code', 'Qty', 'ELGI IVOICE NO.']], use_container_width=True, hide_index=True)
         
+        # --- SERVICE HISTORY (CALL TYPE FIXED) ---
         st.divider(); st.subheader("🕒 Service History")
-        for _, row in history.iterrows():
-            with st.expander(f"📅 {format_dt(row.get('Call Logged Date'))} | ⚙️ {row.get('Call HMR')} HMR"):
-                st.write(f"**Engineer:** {row.get('Service Engineer', 'N/A')}")
-                st.info(row.get('Service Engineer Comments', 'N/A'))
+        if not history.empty:
+            for _, row in history.iterrows():
+                h_date = format_dt(row.get('Call Logged Date'))
+                h_hmr = row.get('Call HMR', 'N/A')
+                h_type = row.get('Call Type', 'N/A')
+                with st.expander(f"📅 {h_date} | ⚙️ {h_hmr} HMR | 🛠️ {h_type}"):
+                    st.write(f"**Call Type:** `{h_type}`")
+                    st.write(f"**Service Engineer:** {row.get('Service Engineer', 'N/A')}")
+                    st.info(row.get('Service Engineer Comments', 'N/A'))
+        else: st.warning("No service history found.")
 
+# --- BAAKI PAGES ---
 elif page == "FOC Tracker List":
-    st.title("📦 Master FOC List")
+    st.title("📦 Master FOC Tracker List")
     query = st.text_input("🔍 Search Customer, Part or FOC No", "")
     f_disp = foc_df[foc_df.astype(str).apply(lambda x: x.str.contains(query, case=False)).any(axis=1)] if query else foc_df
     st.download_button("📊 Download Excel", to_excel(f_disp), "FOC_List.xlsx")
