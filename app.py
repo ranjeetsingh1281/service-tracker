@@ -8,7 +8,7 @@ from reportlab.pdfgen import canvas
 # Page Settings
 st.set_page_config(page_title="ELGi Service Tracker Pro", layout="wide")
 
-# --- DYNAMIC FILE LOADER ---
+# --- DYNAMIC FILE LOADER (With Duplicate & Case Handling) ---
 @st.cache_data
 def load_data():
     folder_files = os.listdir('.')
@@ -22,7 +22,7 @@ def load_data():
     f_name = find_file("Active_FOC.xlsx")
     
     if not m_name or not s_name or not f_name:
-        return None, None, None, ["Files Missing"]
+        return None, None, None, [f for f in ["Master_Data.xlsx", "Service_Details.xlsx", "Active_FOC.xlsx"] if not find_file(f)]
 
     try:
         m_df = pd.read_excel(m_name, engine='openpyxl')
@@ -32,13 +32,25 @@ def load_data():
         # Clean Headers
         m_df.columns = [str(c).strip() for c in m_df.columns]
         s_df.columns = [str(c).strip() for c in s_df.columns]
-        f_df.columns = [str(c).strip() for c in f_df.columns]
+        
+        # FOC Duplicate Header Fix (Handles "ELGI IVOICE NO.")
+        new_f_cols = []
+        counts = {}
+        for col in f_df.columns:
+            c = str(col).strip()
+            if c in counts:
+                counts[c] += 1
+                new_f_cols.append(f"{c}_{counts[c]}")
+            else:
+                counts[c] = 0
+                new_f_cols.append(c)
+        f_df.columns = new_f_cols
             
         return m_df, s_df, f_df, []
     except Exception as e:
         return None, None, None, [str(e)]
 
-# --- EXPORT TOOLS ---
+# --- EXPORT HELPERS ---
 def format_dt(dt):
     if pd.isna(dt) or dt == 0 or str(dt).lower() in ["nan", "nat"]: return "N/A"
     try: return pd.to_datetime(dt).strftime('%d-%b-%y')
@@ -50,101 +62,22 @@ def to_excel(df):
         df.to_excel(writer, index=False)
     return output.getvalue()
 
-master_df, service_df, foc_df, missing = load_data()
-
-if missing:
-    st.error(f"❌ Files Missing: {missing}"); st.stop()
-
-# --- SIDEBAR ---
-st.sidebar.title("📌 Navigation")
-page = st.sidebar.radio("Option Chunein:", ["Machine Tracker", "FOC Tracker List", "Service Pending List"])
-
-# --- 1. MACHINE TRACKER ---
-if page == "Machine Tracker":
-    st.title("🛠️ Machine Tracker Pro")
-    customer_list = sorted(master_df['CUSTOMER NAME'].unique().astype(str))
-    selected_customer = st.sidebar.selectbox("1. Customer Select Karein", options=["All"] + customer_list)
-    cust_filtered = master_df if selected_customer == "All" else master_df[master_df['CUSTOMER NAME'] == selected_customer]
-    
-    # MAIN METRICS
-    st.subheader(f"📊 Dashboard Summary: {selected_customer}")
-    m1, m2, m3 = st.columns(3)
-    t_u = len(cust_filtered)
-    n_w = len(cust_filtered[cust_filtered['Warranty Type'].astype(str).str.contains('Non', na=False, case=False)])
-    m1.metric("Total Units", t_u)
-    m2.metric("In Warranty", t_u - n_w)
-    m3.metric("Non-Warranty", n_w)
-
-    # --- NAYA UPDATE: CATEGORY WISE UNIT COUNT ---
-    st.write("---")
-    st.markdown("#### 📂 Category Wise Unit Count")
-    if 'Category' in cust_filtered.columns:
-        cat_counts = cust_filtered['Category'].value_counts()
-        # Displaying in 4 columns for better look
-        cat_cols = st.columns(4)
-        for i, (cat_name, count) in enumerate(cat_counts.items()):
-            with cat_cols[i % 4]:
-                st.write(f"🔹 **{cat_name}:** `{count}`")
-    else:
-        st.warning("Master Data mein 'Category' column nahi mila. Kripya check karein.")
-    
-    st.divider()
-
-    # Fabrication Selection
-    selected_fab = st.sidebar.selectbox("2. Fabrication No Select Karein", options=["Select"] + sorted(cust_filtered['Fabrication No'].astype(str).unique()))
-
-    if selected_fab != "Select":
-        m_info = cust_filtered[cust_filtered['Fabrication No'].astype(str) == selected_fab].iloc[0]
-        
-        # --- MACHINE DETAILS (C1 to C4) ---
-        c1, c2, c3, c4 = st.columns(4)
-        curr_hmr = pd.to_numeric(m_info.get('HMR Cal.', 0), errors='coerce')
-        last_hmr = pd.to_numeric(m_info.get('Last Call HMR', 0), errors='coerce')
-        elapsed = curr_hmr - last_hmr if curr_hmr > last_hmr else 0
-
-        with c1:
-            st.info("📋 Customer Info")
-            st.write(f"**Customer:** {m_info.get('CUSTOMER NAME')}")
-            st.write(f"**Category:** {m_info.get('Category', 'N/A')}")
-            st.write(f"**HMR Cal:** {curr_hmr}")
-        with c2:
-            st.info("📅 Replacement")
-            st.write(f"**Oil R-Date:** {format_dt(m_info.get('Oil Replacement Date'))}")
-            st.write(f"**AFC R-Date:** {format_dt(m_info.get('Air filter Compressor Replaced Date'))}")
-            st.write(f"**AFE R-Date:** {format_dt(m_info.get('Air filter Engine Replaced Date'))}")
-            st.write(f"**MOF R-Date:** {format_dt(m_info.get('Main Oil filter Replaced Date'))}")
-            st.write(f"**ROF R-Date:** {format_dt(m_info.get('Return Oil filter Replaced Date'))}")
-            st.write(f"**AOS R-Date:** {format_dt(m_info.get('AOS Replaced Date'))}")
-            st.write(f"**Greasing R-Date:** {format_dt(m_info.get('Greasing Done Date'))}")
-            st.write(f"**1500 Kit R-Date:** {format_dt(m_info.get('1500 Valve kit Replaced Date'))}")
-            st.write(f"**3000 Kit R-Date:** {format_dt(m_info.get('3000 Valve kit Replaced Date'))}")
-        with c3:
-            st.info("⚙️ Live Remaining")
-            # Safe remaining calculation
-            for col, lbl in [('HMR - Oil remaining', 'Oil'), ('Air filter replaced - Compressor Remaining Hours', 'AFC'), ('Air filter replaced - Engine Remaining Hours', 'AFE'), ('Main Oil filter Remaining Hours', 'MOF'), ('Return Oil filter Remaining Hours', 'ROF'), ('HMR - Separator remaining', 'AOS'), ('HMR - Motor regressed remaining', 'Greasing'), ('1500 Valve kit Remaining Hours', '1500 Kit'), (3000 Valve kit Remaining Hours', '3000 Kit')]:
-                val = pd.to_numeric(m_info.get(col, 0), errors='coerce')
-                rem = int(val - elapsed) if not pd.isna(val) else 0
-                st.write(f"**{lbl}:** {rem} Hrs" if rem > 0 else f"**{lbl}:** 🚨 {rem} (Due)")
-        with c4:
-            st.error("🚨 DUE DATES")
-            st.write(f"**Oil Due:** {format_dt(m_info.get('OIL DUE DATE'))}")
-            st.write(f"**AOS Due:** {format_dt(m_info.get('AOS DUE DATE'))}")
-
-        # Service History Expanders
-        st.divider(); st.subheader("🕒 Service History")
-        history = service_df[service_df['Fabrication Number'].astype(str) == selected_fab].copy().sort_values(by='Call Logged Date', ascending=False)
-        if not history.empty:
-            for _, row in history.iterrows():
-                with st.expander(f"📅 {format_dt(row.get('Call Logged Date'))} | ⚙️ {row.get('Call HMR')} HMR"):
-                    st.write(f"**Type:** {row.get('Call Type', 'N/A')}")
-                    st.info(row.get('Service Engineer Comments', 'N/A'))
-        else: st.warning("No history found.")
-
-# --- BAAKI PAGES (FOC Tracker & Pending List) SAME RAHENGE ---
-elif page == "FOC Tracker List":
-    st.title("📦 Master FOC Tracker List")
-    st.dataframe(foc_df, use_container_width=True, hide_index=True)
-
-elif page == "Service Pending List":
-    st.title("⏳ Service Pending Dashboard")
-    # Buttons logic...
+def create_pdf(title, info_dict, table_df=None):
+    buffer = BytesIO()
+    p = canvas.Canvas(buffer, pagesize=landscape(letter))
+    width, height = landscape(letter)
+    p.setFont("Helvetica-Bold", 18)
+    p.drawString(50, height-50, title)
+    y = height - 80
+    p.setFont("Helvetica", 10)
+    for k, v in info_dict.items():
+        p.drawString(50, y, f"{k}: {v}"); y -= 15
+    p.line(50, y, width-50, y); y -= 30
+    if table_df is not None and not table_df.empty:
+        p.setFont("Helvetica-Bold", 9)
+        cols = table_df.columns.tolist()[:8]
+        cur_x = 50
+        for c in cols: p.drawString(cur_x, y, str(c)[:15]); cur_x += 95
+        y -= 20; p.setFont("Helvetica", 8)
+        for _, row in table_df.iterrows():
+            if y < 50: p.
