@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import os
 from io import BytesIO
+from reportlab.lib.pagesizes import letter, landscape
+from reportlab.pdfgen import canvas
 
 # Page Settings
 st.set_page_config(page_title="ELGi Service Tracker Pro", layout="wide")
@@ -20,28 +22,24 @@ def load_data():
     f_name = find_file("Active_FOC.xlsx")
     
     if not m_name or not s_name or not f_name:
-        return None, None, None, [f for f in ["Master_Data.xlsx", "Service_Details.xlsx", "Active_FOC.xlsx"] if not find_file(f)]
+        return None, None, None, ["Files missing. Check Master_Data, Service_Details, Active_FOC."]
 
     try:
         m_df = pd.read_excel(m_name, engine='openpyxl')
         s_df = pd.read_excel(s_name, engine='openpyxl')
         f_df = pd.read_excel(f_name, engine='openpyxl')
-        
-        # Clean Headers
         m_df.columns = [str(c).strip() for c in m_df.columns]
         s_df.columns = [str(c).strip() for c in s_df.columns]
         f_df.columns = [str(c).strip() for c in f_df.columns]
-            
         return m_df, s_df, f_df, []
     except Exception as e:
         return None, None, None, [str(e)]
 
+# --- HELPERS ---
 def format_dt(dt):
     if pd.isna(dt) or dt == 0 or str(dt).lower() in ["nan", "nat"]: return "N/A"
-    try:
-        return pd.to_datetime(dt).strftime('%d-%b-%y')
-    except:
-        return str(dt)
+    try: return pd.to_datetime(dt).strftime('%d-%b-%y')
+    except: return str(dt)
 
 def to_excel(df):
     output = BytesIO()
@@ -49,151 +47,122 @@ def to_excel(df):
         df.to_excel(writer, index=False)
     return output.getvalue()
 
+def create_pdf(title, info_dict, table_df=None):
+    buffer = BytesIO()
+    p = canvas.Canvas(buffer, pagesize=landscape(letter))
+    width, height = landscape(letter)
+    p.setFont("Helvetica-Bold", 18); p.drawString(50, height-50, title)
+    y = height - 80; p.setFont("Helvetica", 10)
+    for k, v in info_dict.items():
+        p.drawString(50, y, f"{k}: {v}"); y -= 15
+    p.line(50, y, width-50, y); y -= 30
+    if table_df is not None and not table_df.empty:
+        p.setFont("Helvetica-Bold", 9); cols = table_df.columns.tolist()[:8]
+        cur_x = 50
+        for c in cols: p.drawString(cur_x, y, str(c)[:15]); cur_x += 95
+        y -= 20; p.setFont("Helvetica", 8)
+        for _, row in table_df.iterrows():
+            if y < 50: p.showPage(); y = height-50; p.setFont("Helvetica", 8)
+            cur_x = 50
+            for c in cols: p.drawString(cur_x, y, str(row.get(c, "N/A"))[:18]); cur_x += 95
+            y -= 15
+    p.showPage(); p.save()
+    return buffer.getvalue()
+
 master_df, service_df, foc_df, missing = load_data()
+if missing: st.error(f"Error: {missing}"); st.stop()
 
-if missing:
-    st.error(f"❌ Error or Missing Files: {missing}")
-    st.stop()
-
-# --- SIDEBAR NAVIGATION ---
+# --- SIDEBAR & SEARCH ---
 st.sidebar.title("📌 Navigation")
-page = st.sidebar.radio("Option Chunein:", ["Machine Tracker", "FOC Tracker List", "Service Pending List"])
+page = st.sidebar.radio("Select Dashboard:", ["Machine Tracker", "FOC Tracker List", "Service Pending List"])
 
-# --- 1. MACHINE TRACKER ---
+# Mapping for 9 Parts (Column names in Excel vs Display Labels)
+parts_map = {
+    'Oil': {'rem': 'HMR - Oil remaining', 'date': 'Oil Replacement Date', 'due': 'OIL DUE DATE'},
+    'AFC': {'rem': 'Air filter replaced - Compressor Remaining Hours', 'date': 'Air filter Compressor Replaced Date', 'due': 'AFC DUE DATE'},
+    'AFE': {'rem': 'Air filter replaced - Engine Remaining Hours', 'date': 'Air filter Engine Replaced Date', 'due': 'AFE DUE DATE'},
+    'MOF': {'rem': 'Main Oil filter Remaining Hours', 'date': 'Main Oil filter Replaced Date', 'due': 'MOF DUE DATE'},
+    'ROF': {'rem': 'Return Oil filter Remaining Hours', 'date': 'Return Oil filter Replaced Date', 'due': 'ROF DUE DATE'},
+    'AOS': {'rem': 'HMR - Separator remaining', 'date': 'AOS Replaced Date', 'due': 'AOS DUE DATE'},
+    'Greasing': {'rem': 'HMR - Motor regressed remaining', 'date': 'Greasing Done Date', 'due': 'RGT DUE DATE'},
+    '1500 Kit': {'rem': '1500 Valve kit Remaining Hours', 'date': '1500 Valve kit Replaced Date', 'due': '1500 KIT DUE DATE'},
+    '3000 Kit': {'rem': '3000 Valve kit Remaining Hours', 'date': '3000 Valve kit Replaced Date', 'due': '3000 KIT DUE DATE'}
+}
+
 if page == "Machine Tracker":
     st.title("🛠️ Machine Tracker Pro")
     customer_list = sorted(master_df['CUSTOMER NAME'].unique().astype(str))
-    selected_customer = st.sidebar.selectbox("1. Customer Select Karein", options=["All"] + customer_list)
+    selected_customer = st.sidebar.selectbox("Select Customer", options=["All"] + customer_list)
+    cust_filtered = master_df if selected_customer == "All" else master_df[master_df['CUSTOMER NAME'] == selected_customer]
     
-    filtered_df = master_df if selected_customer == "All" else master_df[master_df['CUSTOMER NAME'] == selected_customer]
-    selected_fab = st.sidebar.selectbox("2. Fabrication No Select Karein", options=["Select"] + sorted(filtered_df['Fabrication No'].astype(str).unique()))
+    # METRICS & CATEGORY
+    m1, m2, m3 = st.columns(3)
+    t_u = len(cust_filtered)
+    w_col = next((c for c in cust_filtered.columns if 'warranty type' in c.lower()), 'Warranty Type')
+    n_w = len(cust_filtered[cust_filtered[w_col].astype(str).str.contains('Non', na=False, case=False)])
+    m1.metric("Total Units", t_u); m2.metric("In Warranty", t_u - n_w); m3.metric("Non-Warranty", n_w)
+    
+    cat_col = next((c for c in cust_filtered.columns if 'category' in c.lower()), 'Category')
+    with st.expander("📂 View Category Wise Unit Count"):
+        counts = cust_filtered[cat_col].value_counts()
+        cols = st.columns(4)
+        for i, (name, count) in enumerate(counts.items()): cols[i%4].write(f"🔹 **{name}:** `{count}`")
+    st.divider()
+
+    selected_fab = st.sidebar.selectbox("Select Fabrication No", options=["Select"] + sorted(cust_filtered['Fabrication No'].astype(str).unique()))
 
     if selected_fab != "Select":
-        m_info = filtered_df[filtered_df['Fabrication No'].astype(str) == selected_fab].iloc[0]
+        m_info = cust_filtered[cust_filtered['Fabrication No'].astype(str) == selected_fab].iloc[0]
+        history = service_df[service_df['Fabrication Number'].astype(str) == selected_fab].copy().sort_values(by='Call Logged Date', ascending=False)
         
-        # Calculations for Live Remaining
+        # Calculations
         curr_hmr = pd.to_numeric(m_info.get('HMR Cal.', 0), errors='coerce')
         last_hmr = pd.to_numeric(m_info.get('Last Call HMR', 0), errors='coerce')
-        # Elapsed logic: Aaj ka HMR - Pichla Service HMR
-        elapsed = curr_hmr - last_hmr if pd.notna(curr_hmr) and pd.notna(last_hmr) and curr_hmr > last_hmr else 0
+        elapsed = curr_hmr - last_hmr if curr_hmr > last_hmr else 0
 
-        # --- DISPLAY C1 to C4 ---
-        st.divider()
+        # C1 to C4
         c1, c2, c3, c4 = st.columns(4)
         with c1:
-            st.info("📋 Machine Info")
+            st.info("📋 Info")
             st.write(f"**Customer:** {m_info.get('CUSTOMER NAME')}")
-            st.write(f"**Avg Running Hrs:** {m_info.get('Avg. Hrs', 'N/A')}")
-            st.write(f"**Calculated Avg Hrs:** {m_info.get('HMR Cal.', 'N/A')}")
-            st.write(f"**Last Call HMR:** {m_info.get('Last Call HMR', 'N/A')}")
-            st.write(f"**Last Call Date:** {format_dt(m_info.get('Last Call HMR Date'))}")
-            st.write(f"**Due Remarks:** {m_info.get('Due remarks', 'N/A')}")
-
+            st.write(f"**HMR Cal:** {curr_hmr}")
+            st.write(f"**Category:** {m_info.get(cat_col, 'N/A')}")
         with c2:
-            st.info("📅 Replacement Dates")
-            st.write(f"**Oil R-Date:** {format_dt(m_info.get('Oil Replacement Date'))}")
-            st.write(f"**AFC R-Date:** {format_dt(m_info.get('Air filter Compressor Replaced Date'))}")
-            st.write(f"**AFE R-Date:** {format_dt(m_info.get('Air filter Engine Replaced Date'))}")
-            st.write(f"**MOF R-Date:** {format_dt(m_info.get('Main Oil filter Replaced Date'))}")
-            st.write(f"**ROF R-Date:** {format_dt(m_info.get('Return Oil filter Replaced Date'))}")
-            st.write(f"**AOS R-Date:** {format_dt(m_info.get('AOS Replaced Date'))}")
-            st.write(f"**Greasing R-Date:** {format_dt(m_info.get('Greasing Done Date'))}")
-            st.write(f"**1500 Kit R-Date:** {format_dt(m_info.get('1500 Valve kit Replaced Date'))}")
-            st.write(f"**3000 Kit R-Date:** {format_dt(m_info.get('3000 Valve kit Replaced Date'))}")
-
+            st.info("📅 Replacement (9 Parts)")
+            for p, cols in parts_map.items(): st.write(f"**{p}:** {format_dt(m_info.get(cols['date']))}")
         with c3:
-            st.info("⚙️ Live Remaining Hrs")
-            rem_mapping = {
-                'HMR - Oil remaining': 'Oil',
-                'Air filter replaced - Compressor Remaining Hours': 'AFC',
-                'Air filter replaced - Engine Remaining Hours': 'AFE',
-                'Main Oil filter Remaining Hours': 'MOF',
-                'Return Oil filter Remaining Hours': 'ROF',
-                'HMR - Separator remaining': 'AOS',
-                'HMR - Motor regressed remaining': 'Greasing',
-                '1500 Valve kit Remaining Hours': '1500 Kit',
-                '3000 Valve kit Remaining Hours': '3000 Kit'
-            }
-            for col, label in rem_mapping.items():
-                val = pd.to_numeric(m_info.get(col, 0), errors='coerce') - elapsed
-                if val <= 0:
-                    st.write(f"**{label}:** 🚨 {int(val)} (Due)")
-                else:
-                    st.write(f"**{label}:** {int(val)} Hrs")
-
+            st.info("⚙️ Live Remaining (9 Parts)")
+            for p, cols in parts_map.items():
+                val = pd.to_numeric(m_info.get(cols['rem'], 0), errors='coerce')
+                rem = int(val - elapsed) if not pd.isna(val) else 0
+                st.write(f"**{p}:** {rem} Hrs" if rem > 0 else f"**{p}:** 🚨 {rem} (Due)")
         with c4:
-            st.error("🚨 DUE DATES")
-            due_cols = ['OIL DUE DATE', 'AFC DUE DATE', 'AFE DUE DATE', 'MOF DUE DATE', 'ROF DUE DATE', 'AOS DUE DATE', 'RGT DUE DATE', '1500 KIT DUE DATE', '3000 KIT DUE DATE']
-            labels = ['Oil', 'AFC', 'AFE', 'MOF', 'ROF', 'AOS', 'Greasing', '1500 Kit', '3000 Kit']
-            for col, label in zip(due_cols, labels):
-                st.write(f"**{label} Due:** {format_dt(m_info.get(col))}")
+            st.error("🚨 DUE DATES (9 Parts)")
+            for p, cols in parts_map.items(): st.write(f"**{p}:** {format_dt(m_info.get(cols['due']))}")
 
-        # --- FOC FOR SPECIFIC MACHINE ---
         st.divider()
-        st.subheader("🎁 FOC Parts for this Machine")
-        f_col = 'FABRICATION NO' if 'FABRICATION NO' in foc_df.columns else 'FABRICATION NO.'
-        foc_match = foc_df[foc_df[f_col].astype(str) == selected_fab].copy()
-        if not foc_match.empty:
-            st.dataframe(foc_match[['Failure Material Details', 'Part Code', 'Qty', 'ELGI IVOICE NO.']], use_container_width=True, hide_index=True)
-        else: st.info("No FOC record.")
+        ex1, ex2 = st.columns(2)
+        ex1.download_button("📊 Export Excel", to_excel(history), f"History_{selected_fab}.xlsx")
+        ex2.download_button("📄 Export Full PDF", create_pdf("Report", {"Fab": selected_fab}, history), f"Report_{selected_fab}.pdf")
 
-        # --- SERVICE HISTORY ---
-        st.divider()
-        st.subheader("🕒 Service History")
-        history = service_df[service_df['Fabrication Number'].astype(str) == selected_fab].copy().sort_values(by='Call Logged Date', ascending=False)
-        if not history.empty:
-            for _, row in history.iterrows():
-                header = f"📅 {format_dt(row.get('Call Logged Date'))} | ⚙️ {row.get('Call HMR')} HMR | 🛠️ {row.get('Call Type', 'N/A')}"
-                with st.expander(header):
-                    st.write(f"**Engineer:** {row.get('Service Engineer', 'N/A')}")
-                    st.info(row.get('Service Engineer Comments', 'N/A'))
-
-# --- 2. FOC TRACKER LIST (DETAILED) ---
 elif page == "FOC Tracker List":
     st.title("📦 Master FOC Tracker List")
-    st.write("Yahan aap poori FOC history dekh sakte hain.")
+    # SEARCH BAR
+    search_query = st.text_input("🔍 Search by Customer Name, FOC No or Part Code", "")
+    if search_query:
+        foc_display = foc_df[foc_df.astype(str).apply(lambda x: x.str.contains(search_query, case=False)).any(axis=1)]
+    else: foc_display = foc_df
     
-    # User requested 14 Columns
-    foc_cols = [
-        'Created On', 'FOC Number', 'Call Tracking Number', 'Customer Name', 
-        'FOC Type', 'FOC Category', 'FOC Status', 'DEALER INVOICE NO./ DATE', 
-        'Failure Material Details', 'Part Code', 'Qty', 'ELGI IVOICE NO.', 
-        'AO Number', 'LR Number'
-    ]
-    
-    # Filter only available columns from the list
-    available_foc_cols = [c for c in foc_cols if c in foc_df.columns]
-    
-    st.download_button("📥 Download This FOC List (Excel)", to_excel(foc_df[available_foc_cols]), "FOC_Tracker_List.xlsx")
-    st.dataframe(foc_df[available_foc_cols], use_container_width=True, hide_index=True)
+    st.download_button("📊 Export Excel", to_excel(foc_display), "FOC_List.xlsx")
+    st.dataframe(foc_display, use_container_width=True, hide_index=True)
 
-# --- 3. SERVICE PENDING DASHBOARD (DATE FIXED) ---
 elif page == "Service Pending List":
-    st.title("⏳ BIS Service Pending Dashboard")
-    st.write("Niche diye gaye buttons se filter karein:")
-    
+    st.title("⏳ Service Pending")
     b1, b2, b3 = st.columns(3)
-    pending_list = pd.DataFrame()
-
-    if b1.button("🔴 BIS Over Due", use_container_width=True):
-        pending_list = master_df[master_df['BIS Over Due'] != 0].copy()
-    if b2.button("🟡 BIS Current Month", use_container_width=True):
-        pending_list = master_df[master_df['BIS Current Month Due'] != 0].copy()
-    if b3.button("🟢 BIS Next Month", use_container_width=True):
-        pending_list = master_df[master_df['BIS Next Month Due'] != 0].copy()
-
-    if not pending_list.empty:
-        st.success(f"Total Records Found: {len(pending_list)}")
-        st.download_button("📥 Download Pending List (Excel)", to_excel(pending_list), "Pending_List.xlsx")
-        
-        # Columns to display in table
-        disp_cols = ['CUSTOMER NAME', 'Fabrication No', 'HMR Cal.', 'OIL DUE DATE', 'AFC DUE DATE', 'AOS DUE DATE', '3000 KIT DUE DATE']
-        table_df = pending_list[disp_cols].copy()
-        
-        # Applying dd-mmm-yy format to all date columns in table
-        for c in ['OIL DUE DATE', 'AFC DUE DATE', 'AOS DUE DATE', '3000 KIT DUE DATE']:
-            table_df[c] = table_df[c].apply(format_dt)
-            
-        st.dataframe(table_df, use_container_width=True, hide_index=True)
-    else:
-        st.info("Kripya filter karne ke liye upar diye gaye buttons mein se ek select karein.")
+    p_df = pd.DataFrame()
+    if b1.button("🔴 Overdue"): p_df = master_df[master_df.get('BIS Over Due', 0) != 0].copy()
+    if b2.button("🟡 Current Month"): p_df = master_df[master_df.get('BIS Current Month Due', 0) != 0].copy()
+    if b3.button("🟢 Next Month"): p_df = master_df[master_df.get('BIS Next Month Due', 0) != 0].copy()
+    
+    if not p_df.empty:
+        st.dataframe(p_df[['CUSTOMER NAME', 'Fabrication No', 'OIL DUE DATE', 'AFC DUE DATE', 'AOS DUE DATE']], use_container_width=True)
