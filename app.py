@@ -39,84 +39,69 @@ def format_dt(dt):
     try: return pd.to_datetime(dt).strftime('%d-%b-%y')
     except: return str(dt)
 
-def to_excel(df):
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df.to_excel(writer, index=False)
-    return output.getvalue()
-
 master_df, master_od_df, service_df, foc_df, errors = load_data()
 
 # --- SIDEBAR NAVIGATION ---
 st.sidebar.title("📌 Navigation")
-page = st.sidebar.radio("Dashboard Select Karein:", 
-                        ["Standard Machine Tracker", "OD Machine Tracker", "FOC Tracker List", "Service Pending List"])
+main_menu = st.sidebar.radio("Main Section:", ["Standard Data (Master_Data)", "OD Data (Master_OD_Data)"])
 
-# --- SHARED PARTS MAPPING ---
-std_parts = {
-    'Oil': {'rem': 'HMR - Oil remaining', 'date': 'Oil Replacement Date', 'due': 'OIL DUE DATE'},
-    'AFC': {'rem': 'Air filter replaced - Compressor Remaining Hours', 'date': 'Air filter Compressor Replaced Date', 'due': 'AFC DUE DATE'},
-    'AOS': {'rem': 'HMR - Separator remaining', 'date': 'AOS Replaced Date', 'due': 'AOS DUE DATE'}
-}
-od_parts_map = {
-    'Oil': {'rem': 'MDA OIL Remaining Hours', 'date': 'MDA Oil R Date', 'due': 'OIL DUE DATE'},
-    'AF': {'rem': 'AF Remaining Hours', 'date': 'MDA AF R Date', 'due': 'AF DUE DATE'},
-    'AOS': {'rem': 'AOS Remaining Hours', 'date': 'MDA AOS R Date', 'due': 'AOS DUE DATE'}
-}
+if main_menu == "Standard Data (Master_Data)":
+    page = st.sidebar.selectbox("Standard Dashboard:", ["Machine Tracker", "FOC List", "Service Pending"])
+else:
+    page = st.sidebar.selectbox("OD Dashboard:", ["Machine Tracker", "FOC List", "Service Pending"])
 
-# --- 1. & 2. TRACKER LOGIC (SAME AS BEFORE) ---
-if page == "Standard Machine Tracker":
-    st.title("🛠️ Standard Machine Tracker")
-    # (Existing Standard Tracker Code...)
+# --- 1. STANDARD DATA SECTION ---
+if main_menu == "Standard Data (Master_Data)":
+    if page == "Machine Tracker":
+        st.title("🛠️ Standard Machine Tracker")
+        cust_list = sorted(master_df['CUSTOMER NAME'].unique().astype(str))
+        sel_cust = st.sidebar.selectbox("Customer", options=["All"] + cust_list, key="std_cust")
+        df_f = master_df if sel_cust == "All" else master_df[master_df['CUSTOMER NAME'] == sel_cust]
+        sel_fab = st.sidebar.selectbox("Fabrication No", options=["Select"] + sorted(df_f['Fabrication No'].astype(str).unique()), key="std_fab")
 
-elif page == "OD Machine Tracker":
-    st.title("🛡️ OD Machine Tracker (Live Hours)")
-    # (Existing OD Tracker Code with Live Calc...)
+        if sel_fab != "Select":
+            row = df_f[df_f['Fabrication No'].astype(str) == sel_fab].iloc[0]
+            # ... [C1-C4 display logic same as before with Live HMR calculation]
+            st.success(f"Viewing Standard Machine: {sel_fab}")
+            # [Yahan C1-C4 ka Standard wala code rahega]
 
-# --- 3. FOC TRACKER ---
-elif page == "FOC Tracker List":
-    st.title("📦 Master FOC Tracker")
-    query = st.text_input("🔍 Search Customer, Part No or FOC No", "")
-    f_disp = foc_df[foc_df.astype(str).apply(lambda x: x.str.contains(query, case=False)).any(axis=1)] if query else foc_df
-    st.dataframe(f_disp, use_container_width=True, hide_index=True)
+    elif page == "FOC List":
+        st.title("📦 Standard FOC Tracker List")
+        # Filters only for Standard Fabrication Numbers
+        std_fabs = master_df['Fabrication No'].astype(str).unique()
+        f_std = foc_df[foc_df['FABRICATION NO'].astype(str).isin(std_fabs)]
+        st.dataframe(f_std, use_container_width=True)
 
-# --- 4. SERVICE PENDING LIST (IRON-CLAD UPDATE) ---
-elif page == "Service Pending List":
-    st.title("⏳ Combined Service Pending Dashboard")
-    st.write("Dono Master Files (Standard + OD) se pending units yahan dikhenge.")
-    
-    b1, b2, b3 = st.columns(3)
-    pending_list = pd.DataFrame()
-    
-    # Logic for Overdue (Red)
-    if b1.button("🔴 Overdue Units (Red)", use_container_width=True):
-        p_std = master_df[master_df.get('BIS Over Due', 0) != 0].copy() if not master_df.empty else pd.DataFrame()
-        p_od = master_od_df[master_od_df.get('Red Count', 0) != 0].copy() if not master_od_df.empty else pd.DataFrame()
-        if not p_od.empty: p_od = p_od.rename(columns={'Customer Name': 'CUSTOMER NAME'})
-        pending_list = pd.concat([p_std, p_od], ignore_index=True, sort=False)
+    elif page == "Service Pending":
+        st.title("⏳ Standard Service Pending")
+        b1, b2, b3 = st.columns(3)
+        if b1.button("🔴 Overdue"): st.dataframe(master_df[master_df['BIS Over Due'] != 0])
+        if b2.button("🟡 Current Month"): st.dataframe(master_df[master_df['BIS Current Month Due'] != 0])
+        if b3.button("🟢 Next Month"): st.dataframe(master_df[master_df['BIS Next Month Due'] != 0])
 
-    # Logic for Current Month (Yellow)
-    if b2.button("🟡 Current Month Due (Yellow)", use_container_width=True):
-        p_std = master_df[master_df.get('BIS Current Month Due', 0) != 0].copy() if not master_df.empty else pd.DataFrame()
-        p_od = master_od_df[master_od_df.get('Yellow Count', 0) != 0].copy() if not master_od_df.empty else pd.DataFrame()
-        if not p_od.empty: p_od = p_od.rename(columns={'Customer Name': 'CUSTOMER NAME'})
-        pending_list = pd.concat([p_std, p_od], ignore_index=True, sort=False)
+# --- 2. OD DATA SECTION ---
+elif main_menu == "OD Data (Master_OD_Data)":
+    if page == "Machine Tracker":
+        st.title("🛡️ OD Machine Tracker")
+        cust_list_od = sorted(master_od_df['Customer Name'].unique().astype(str))
+        sel_cust_od = st.sidebar.selectbox("Customer", options=["All"] + cust_list_od, key="od_cust")
+        df_od_f = master_od_df if sel_cust_od == "All" else master_od_df[master_od_df['Customer Name'] == sel_cust_od]
+        sel_fab_od = st.sidebar.selectbox("Fabrication No", options=["Select"] + sorted(df_od_f['Fabrication No'].astype(str).unique()), key="od_fab")
 
-    # Logic for Next Month (Green)
-    if b3.button("🟢 Next Month Due (Green)", use_container_width=True):
-        p_std = master_df[master_df.get('BIS Next Month Due', 0) != 0].copy() if not master_df.empty else pd.DataFrame()
-        p_od = master_od_df[master_od_df.get('Green Count', 0) != 0].copy() if not master_od_df.empty else pd.DataFrame()
-        if not p_od.empty: p_od = p_od.rename(columns={'Customer Name': 'CUSTOMER NAME'})
-        pending_list = pd.concat([p_std, p_od], ignore_index=True, sort=False)
+        if sel_fab_od != "Select":
+            row_od = df_od_f[df_od_f['Fabrication No'].astype(str) == sel_fab_od].iloc[0]
+            # ... [C1-C4 display logic with MDA Live Hours calculation]
+            st.success(f"Viewing OD Machine: {sel_fab_od}")
 
-    if not pending_list.empty:
-        st.success(f"Total Pending Records: {len(pending_list)}")
-        # Columns select karein jo dono mein common hain
-        disp_cols = ['CUSTOMER NAME', 'Fabrication No', 'Model', 'Category', 'OIL DUE DATE', 'AOS DUE DATE']
-        # Sirf wahi dikhao jo available hain
-        actual_cols = [c for c in disp_cols if c in pending_list.columns]
-        
-        st.download_button("📊 Export Combined Pending List", to_excel(pending_list), "Combined_Pending.xlsx")
-        st.dataframe(pending_list[actual_cols], use_container_width=True, hide_index=True)
-    else:
-        st.info("Kripya ek button click karein pending units dekhne ke liye.")
+    elif page == "FOC List":
+        st.title("📦 OD FOC Tracker List")
+        od_fabs = master_od_df['Fabrication No'].astype(str).unique()
+        f_od = foc_df[foc_df['FABRICATION NO'].astype(str).isin(od_fabs)]
+        st.dataframe(f_od, use_container_width=True)
+
+    elif page == "Service Pending":
+        st.title("⏳ OD Service Pending")
+        o1, o2, o3 = st.columns(3)
+        if o1.button("🔴 Red Count (Overdue)"): st.dataframe(master_od_df[master_od_df['Red Count'] != 0])
+        if o2.button("🟡 Yellow Count (Current)"): st.dataframe(master_od_df[master_od_df['Yellow Count'] != 0])
+        if o3.button("🟢 Green Count (Next Month)"): st.dataframe(master_od_df[master_od_df['Green Count'] != 0])
