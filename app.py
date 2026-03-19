@@ -80,8 +80,6 @@ if master_df is not None:
             st.write(f"**Sate:** {m_info.get('State', 'N/A')}")
             st.write(f"**Category:** {m_info.get('Category', 'N/A')}")
             st.write(f"**Avg. Running Hrs:** {m_info.get('MDA AVG Running Hours Per Day', 'N/A')}👈")
-            st.write(f"**Current Load HMR (Cal.):** {CURRENT LOAD HMR}👈")
-            st.write(f"**Current Unload HMR (Cal.):** {CURRENT UNLOAD HMR}👈")
             st.write(f"**Last Call HMR:** {Last Sch HMR}")
             st.write(f"**Last Call HMR Date:** {format_dt(m_info.get('Last Sch Date'))}")
             st.write(f"**Hours since Last Service:** {int(elapsed_hours)}👈")
