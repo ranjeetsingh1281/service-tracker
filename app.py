@@ -1,93 +1,109 @@
 import streamlit as st
 import pandas as pd
 import os
+from io import BytesIO
 
 # Page Settings
 st.set_page_config(page_title="ELGi Service Tracker Pro", layout="wide")
 
-st.title("🛠️ ELGi Compressor Service Tracker Pro")
-st.markdown("Advanced Machine Details (Industrial)")
-
-# Data Load Function
+# --- DATA LOAD FUNCTION ---
 @st.cache_data
 def load_data():
-    m_file = "Master_OD_Data.xlsx"
-    s_file = "Service_Details.xlsx"
+    folder_files = os.listdir('.')
+    def find_file(target):
+        for f in folder_files:
+            if f.lower() == target.lower(): return f
+        return None
+
+    m_name = find_file("Master_Data.xlsx")
+    s_name = find_file("Service_Details.xlsx")
+    f_name = find_file("Active_FOC.xlsx")
     
-    if os.path.exists(m_file) and os.path.exists(s_file):
-        m_df = pd.read_excel(m_file, engine='openpyxl')
-        s_df = pd.read_excel(s_file, engine='openpyxl')
-        
-        # Date columns conversion
-        date_columns = [
-            'Warranty Start Date', 'MDA HMR Date',
-            'MDA Oil R Date', 'MDA AF R Date', 
-            'MDA OF R Date', 'MDA AOS R Date', 
-            'MDA RGT R Date', 'MDA Valvekit R Date', 
-            'MDA PF R DATE', 'MDA FF R DATE', 
-            'MDA CF R DATE', 'AF Next Due Date', 'OF Next Due Date', 
-            'Oil Next Due Date', 'AOS Next Due Date', 'VALVE Next Due Date', 'RGT Next Due Date', 
-            'PF Next Due date', 'CF Next Due Date', 'FF Next Due Date', 'Last Sch Date'
-        ]
-        
-        for col in date_columns:
-            if col in m_df.columns:
-                m_df[col] = pd.to_datetime(m_df[col], errors='coerce')
+    if not m_name or not s_name or not f_name:
+        return None, None, None, [f for f in ["Master_Data.xlsx", "Service_Details.xlsx", "Active_FOC.xlsx"] if not find_file(f)]
 
-        s_df['Call Logged Date'] = pd.to_datetime(s_df['Call Logged Date'], errors='coerce')
-        return m_df, s_df
-    return None, None
-
-master_df, service_df = load_data()
+    try:
+        m_df = pd.read_excel(m_name, engine='openpyxl')
+        s_df = pd.read_excel(s_name, engine='openpyxl')
+        f_df = pd.read_excel(f_name, engine='openpyxl')
+        
+        # Clean Headers
+        m_df.columns = [str(c).strip() for c in m_df.columns]
+        s_df.columns = [str(c).strip() for c in s_df.columns]
+        f_df.columns = [str(c).strip() for c in f_df.columns]
+            
+        return m_df, s_df, f_df, []
+    except Exception as e:
+        return None, None, None, [str(e)]
 
 def format_dt(dt):
-    if pd.isna(dt) or dt == 0 or str(dt).lower() in ["nan", "nat"]: 
-        return "N/A"
+    if pd.isna(dt) or dt == 0 or str(dt).lower() in ["nan", "nat"]: return "N/A"
     try:
-        return dt.strftime('%d-%b-%y')
+        return pd.to_datetime(dt).strftime('%d-%b-%y')
     except:
         return str(dt)
 
-if master_df is not None:
-    fab_list = sorted(master_df['Fabrication No'].unique().astype(str))
-    selected_fab = st.selectbox("🔍 Search Fabrication Number", options=["Select Number"] + fab_list)
+def to_excel(df):
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False)
+    return output.getvalue()
 
-    if selected_fab != "Select Number":
-        m_info = master_df[master_df['Fabrication No'] == selected_fab].iloc[0]
+master_df, service_df, foc_df, missing = load_data()
 
-        # --- SECTION 1: WARRANTY ---
-        st.divider()
-        st.subheader(f"🛡️ Obligation (Warranty): {m_info.get('Warranty Type', 'N/A')}")
-        st.write(f"📅 **Start:** {format_dt(m_info.get('Warranty Start Date'))}")
+if missing:
+    st.error(f"❌ Error or Missing Files: {missing}")
+    st.stop()
 
-        # --- PRE-CALCULATION FOR LIVE REMAINING HOURS ---
-        # Current HMR vs Last Service HMR difference
-        current_hmr = pd.to_numeric(m_info.get('CURRENT HMR', 0), errors='coerce')
-        last_service_hmr = pd.to_numeric(m_info.get('Last Sch HMR', 0), errors='coerce')
+# --- SIDEBAR NAVIGATION ---
+st.sidebar.title("📌 Navigation")
+page = st.sidebar.radio("Option Chunein:", ["Machine Tracker", "FOC Tracker List", "Service Pending List"])
+
+# --- 1. MACHINE TRACKER ---
+if page == "Machine Tracker":
+    st.title("🛠️ Machine Tracker Pro")
+    customer_list = sorted(master_df['CUSTOMER NAME'].unique().astype(str))
+    selected_customer = st.sidebar.selectbox("1. Customer Select Karein", options=["All"] + customer_list)
+    
+    if selected_customer != "All Customers":
+            filtered_df = master_df[master_df['CUSTOMER NAME'] == selected_customer].copy()
+            st.subheader(f"📊 Summary: {selected_customer}")
+            m1, m2, m3 = st.columns(3)
+            out_count = len(filtered_df[filtered_df['Warranty Type'].str.contains('Non', na=False, case=False)])
+            m1.metric("Total Machines", len(filtered_df))
+            m2.metric("In Warranty", len(filtered_df) - out_count)
+            m3.metric("Out of Warranty", out_count)
+            st.divider()
+
+    if selected_fab != "Select":
+        m_info = filtered_df[filtered_df['Fabrication No'].astype(str) == selected_fab].iloc[0]
         
-        # Kitne hours machine chal chuki hai pichli service ke baad
-        elapsed_hours = current_hmr - last_service_hmr if pd.notna(current_hmr) and pd.notna(last_service_hmr) else 0
+        # Calculations for Live Remaining
+        curr_hmr = pd.to_numeric(m_info.get('HMR Cal.', 0), errors='coerce')
+        last_hmr = pd.to_numeric(m_info.get('Last Call HMR', 0), errors='coerce')
+        # Elapsed logic: Aaj ka HMR - Pichla Service HMR
+        elapsed = curr_hmr - last_hmr if pd.notna(curr_hmr) and pd.notna(last_hmr) and curr_hmr > last_hmr else 0
 
-        # --- SECTION 2: 4-COLUMN LAYOUT ---
-        st.divider()
-        col1, col2, col3, col4 = st.columns(4)
+         # --- SECTION 1: MACHINE HEADER ---
+            st.divider()
+            st.subheader(f"🛡️ Obligation: {m_info.get('Warranty Type', 'N/A')}")
+            st.write(f"📅 **Warranty Start:** {format_dt(m_info.get('Warranty Start Date'))} | **End:** {format_dt(m_info.get('Warranty End date'))}")
         
-        with col1:
-            st.info("📋 Customer Info")
-            st.write(f"**Customer:** {m_info.get('CUSTOMER NAME', 'N/A')}")
-            st.write(f"**Location:** {m_info.get('Location', 'N/A')}")
-            st.write(f"**City:** {m_info.get('City', 'N/A')}")
-            st.write(f"**Sate:** {m_info.get('State', 'N/A')}")
-            st.write(f"**Category:** {m_info.get('Category', 'N/A')}")
-            st.write(f"**Avg. Running Hrs:** {m_info.get('MDA AVG Running Hours Per Day', 'N/A')}👈")
-            st.write(f"**Last Call HMR:** {m_info.get('Last Sch HMR')}")
-            st.write(f"**Last Call HMR Date:** {format_dt(m_info.get('Last Sch Date'))}")
-            st.write(f"**Hours since Last Service:** {int(elapsed_hours)}👈")
+        # --- DISPLAY C1 to C4 ---
+        st.divider()
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            st.info("📋 Machine Info")
+            st.write(f"**Customer:** {m_info.get('CUSTOMER NAME')}")
+            st.write(f"**Avg Running Hrs:** {m_info.get('Avg. Hrs', 'N/A')}")
+            st.write(f"**Calculated Avg Hrs:** {m_info.get('HMR Cal.', 'N/A')}")
+            st.write(f"**Last Call HMR:** {m_info.get('Last Call HMR', 'N/A')}")
+            st.write(f"**Last Call Date:** {format_dt(m_info.get('Last Call HMR Date'))}")
+            st.write(f"**Since Last Service:** {int(elapsed)} Hrs 🛠️")
 
-        with col2:
+        with c2:
             st.info("📅 Replacement Dates")
-             # Sabhi Replacement dates par format_dt apply kiya gaya hai
-            st.write(f"**Oil R-Date:** {format_dt(m_info.get('MDA Oil R Date'))}")
+            st.write(f"**Oil R-Date:** {format_dt(m_info.get('Oil Replacement Date'))}")
             st.write(f"**AFC R-Date:** {format_dt(m_info.get('Air filter Compressor Replaced Date'))}")
             st.write(f"**AFE R-Date:** {format_dt(m_info.get('Air filter Engine Replaced Date'))}")
             st.write(f"**MOF R-Date:** {format_dt(m_info.get('Main Oil filter Replaced Date'))}")
@@ -97,10 +113,9 @@ if master_df is not None:
             st.write(f"**1500 Kit R-Date:** {format_dt(m_info.get('1500 Valve kit Replaced Date'))}")
             st.write(f"**3000 Kit R-Date:** {format_dt(m_info.get('3000 Valve kit Replaced Date'))}")
 
-        with col3:
-            st.info("⚙️ Live Remaining Hours")
-            # Logic: Last Service Remaining - Elapsed Hours
-            rem_cols = {
+        with c3:
+            st.info("⚙️ Live Remaining")
+            rem_mapping = {
                 'HMR - Oil remaining': 'Oil',
                 'Air filter replaced - Compressor Remaining Hours': 'AFC',
                 'Air filter replaced - Engine Remaining Hours': 'AFE',
@@ -111,44 +126,86 @@ if master_df is not None:
                 '1500 Valve kit Remaining Hours': '1500 Kit',
                 '3000 Valve kit Remaining Hours': '3000 Kit'
             }
-            
-            for original_col, label in rem_cols.items():
-                orig_rem = pd.to_numeric(m_info.get(original_col, 0), errors='coerce')
-                live_rem = orig_rem - elapsed_hours if pd.notna(orig_rem) else 0
-                
-                # Agar hours khatam ho gaye hain toh minus ki jagah 0 ya Warning dikhayein
-                if live_rem <= 0:
-                    st.write(f"**{label}:** 🚨 {int(live_rem)} (Due Now)")
+            for col, label in rem_mapping.items():
+                val = pd.to_numeric(m_info.get(col, 0), errors='coerce') - elapsed
+                if val <= 0:
+                    st.write(f"**{label}:** 🚨 {int(val)} (Due)")
                 else:
-                    st.write(f"**{label}:** {int(live_rem)} Hrs")
+                    st.write(f"**{label}:** {int(val)} Hrs")
 
-        with col4:
+        with c4:
             st.error("🚨 DUE DATES")
-            st.write(f"**Oil Due:** {format_dt(m_info.get('OIL DUE DATE'))}")
-            st.write(f"**AFC Due:** {format_dt(m_info.get('AFC DUE DATE'))}")
-            st.write(f"**AFE Due:** {format_dt(m_info.get('AFE DUE DATE'))}")
-            st.write(f"**MOF Due:** {format_dt(m_info.get('MOF DUE DATE'))}")
-            st.write(f"**ROF Due:** {format_dt(m_info.get('ROF DUE DATE'))}")
-            st.write(f"**AOS Due:** {format_dt(m_info.get('AOS DUE DATE'))}")
-            st.write(f"**Greasing Due:** {format_dt(m_info.get('RGT DUE DATE'))}")
-            st.write(f"**1500 Kit Due:** {format_dt(m_info.get('1500 KIT DUE DATE'))}")
-            st.write(f"**3000 Kit Due:** {format_dt(m_info.get('3000 KIT DUE DATE'))}")
-
-        # --- SECTION 3: SERVICE HISTORY ---
+            due_cols = ['OIL DUE DATE', 'AFC DUE DATE', 'AFE DUE DATE', 'MOF DUE DATE', 'ROF DUE DATE', 'AOS DUE DATE', 'RGT DUE DATE', '1500 KIT DUE DATE', '3000 KIT DUE DATE']
+            labels = ['Oil', 'AFC', 'AFE', 'MOF', 'ROF', 'AOS', 'Greasing', '1500 Kit', '3000 Kit']
+            for col, label in zip(due_cols, labels):
+                st.write(f"**{label} Due:** {format_dt(m_info.get(col))}")
+   
+        # --- SERVICE HISTORY ---
         st.divider()
-        st.subheader("🕒 Service History (Newest First)")
-        history = service_df[service_df['Fabrication Number'] == selected_fab].copy()
-        history = history.sort_values(by='Call Logged Date', ascending=False)
-        
+        st.subheader("🕒 Service History")
+        history = service_df[service_df['Fabrication Number'].astype(str) == selected_fab].copy().sort_values(by='Call Logged Date', ascending=False)
         if not history.empty:
-            for index, row in history.iterrows():
-                d_str = format_dt(row['Call Logged Date'])
-                header = f"📅 {d_str} | ⚙️ {row.get('Call HMR', 'N/A')} HMR | {row.get('Call Type', 'N/A')}"
+            for _, row in history.iterrows():
+                header = f"📅 {format_dt(row.get('Call Logged Date'))} | ⚙️ {row.get('Call HMR')} HMR | 🛠️ {row.get('Call Type', 'N/A')}"
                 with st.expander(header):
-                    st.write(f"**Status:** {row.get('Call Status', 'N/A')}")
-                    st.write("**Engineer Comments:**")
-                    st.info(row.get('Service Engineer Comments', 'No comments.'))
-        else:
-            st.warning("No history found.")
-else:
-    st.error("Excel files nahi mili!")
+                    st.write(f"**Engineer:** {row.get('Service Engineer', 'N/A')}")
+                    st.info(row.get('Service Engineer Comments', 'N/A'))
+                    
+         # --- FOC FOR SPECIFIC MACHINE ---
+        st.divider()
+        st.subheader("🎁 FOC Parts for this Machine")
+        f_col = 'FABRICATION NO' if 'FABRICATION NO' in foc_df.columns else 'FABRICATION NO.'
+        foc_match = foc_df[foc_df[f_col].astype(str) == selected_fab].copy()
+        if not foc_match.empty:
+            st.dataframe(foc_match[['Failure Material Details', 'Part Code', 'Qty', 'FOC Status', 'ELGI IVOICE NO.']], use_container_width=True, hide_index=True)
+        else: st.info("No FOC record.")
+            
+# --- 2. FOC TRACKER LIST (DETAILED) ---
+elif page == "FOC Tracker List":
+    st.title("📦 Master FOC Tracker List")
+    st.write("Yahan aap poori FOC history dekh sakte hain.")
+    
+    # User requested 14 Columns
+    foc_cols = [
+        'Created On', 'FOC Number', 'Call Tracking Number', 'Customer Name', 
+        'FOC Type', 'FOC Status', 'DEALER INVOICE NO./ DATE', 'Part Code',
+        'Failure Material Details',  'Qty', 'ELGI IVOICE NO.', 
+        'LR Number'
+    ]
+    
+    # Filter only available columns from the list
+    available_foc_cols = [c for c in foc_cols if c in foc_df.columns]
+    
+    st.download_button("📥 Download This FOC List (Excel)", to_excel(foc_df[available_foc_cols]), "FOC_Tracker_List.xlsx")
+    st.dataframe(foc_df[available_foc_cols], use_container_width=True, hide_index=True)
+
+# --- 3. SERVICE PENDING DASHBOARD (DATE FIXED) ---
+elif page == "Service Pending List":
+    st.title("⏳ BIS Service Pending Dashboard")
+    st.write("Niche diye gaye buttons se filter karein:")
+    
+    b1, b2, b3 = st.columns(3)
+    pending_list = pd.DataFrame()
+
+    if b1.button("🔴 BIS Over Due", use_container_width=True):
+        pending_list = master_df[master_df['BIS Over Due'] != 0].copy()
+    if b2.button("🟡 BIS Current Month", use_container_width=True):
+        pending_list = master_df[master_df['BIS Current Month Due'] != 0].copy()
+    if b3.button("🟢 BIS Next Month", use_container_width=True):
+        pending_list = master_df[master_df['BIS Next Month Due'] != 0].copy()
+
+    if not pending_list.empty:
+        st.success(f"Total Records Found: {len(pending_list)}")
+        st.download_button("📥 Download Pending List (Excel)", to_excel(pending_list), "Pending_List.xlsx")
+        
+        # Columns to display in table
+        disp_cols = ['CUSTOMER NAME', 'Fabrication No', 'HMR Cal.', 'OIL DUE DATE', 'AFC DUE DATE', 'AOS DUE DATE', '3000 KIT DUE DATE']
+        table_df = pending_list[disp_cols].copy()
+        
+        # Applying dd-mmm-yy format to all date columns in table
+        for c in ['OIL DUE DATE', 'AFC DUE DATE', 'AOS DUE DATE', '3000 KIT DUE DATE']:
+            table_df[c] = table_df[c].apply(format_dt)
+            
+        st.dataframe(table_df, use_container_width=True, hide_index=True)
+    else:
+        st.info("Kripya filter karne ke liye upar diye gaye buttons mein se ek select karein.")
