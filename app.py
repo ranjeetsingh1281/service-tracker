@@ -90,7 +90,8 @@ if main_choice == "DPSAC Tracker":
                 st.info("📋 Info")
                 st.write(f"**Customer:** {row.get('CUSTOMER NAME')}")
                 st.write(f"**Model:** {row.get('MODEL')}"); st.write(f"**Sl No:** {row.get('SL NO.')}")
-                st.write(f"**Location:** {row.get('LOCATION')}"); st.write(f"**HMR Cal:** {curr_h}"); st.write(f"**Avg. Running Hrs:**{row.get('Avg. Hrs')}")
+                st.write(f"**Location:** {row.get('LOCATION')}"); st.write(f"**HMR Cal:** {curr_h}")
+                st.write(f"**Avg. Running Hrs:** {row.get('Avg. Hrs')}")
             with c2:
                 st.info("📅 Replacement")
                 for p, m in std_parts.items(): st.write(f"**{p}:** {format_dt(row.get(m['date']))}")
