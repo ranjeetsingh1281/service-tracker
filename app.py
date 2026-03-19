@@ -48,10 +48,11 @@ def to_excel(df):
 master_df, master_od_df, service_df, foc_df, errors = load_data()
 
 # --- SIDEBAR NAVIGATION ---
-st.sidebar.title("📌 Navigation")
-page = st.sidebar.radio("Select Dashboard:", ["Standard Tracker", "OD Machine Tracker", "FOC Tracker List", "Service Pending List"])
+st.sidebar.title("📌 Navigation Menu")
+page = st.sidebar.radio("Dashboard Select Karein:", 
+                        ["Standard Machine Tracker", "OD Machine Tracker", "FOC Tracker List", "Service Pending List"])
 
-# Mapping for Standard Dashboard (9 Parts)
+# Mapping for 9 Parts
 std_parts = {
     'Oil': {'rem': 'HMR - Oil remaining', 'date': 'Oil Replacement Date', 'due': 'OIL DUE DATE'},
     'AFC': {'rem': 'Air filter replaced - Compressor Remaining Hours', 'date': 'Air filter Compressor Replaced Date', 'due': 'AFC DUE DATE'},
@@ -64,7 +65,6 @@ std_parts = {
     '3000 Kit': {'rem': '3000 Valve kit Remaining Hours', 'date': '3000 Valve kit Replaced Date', 'due': '3000 KIT DUE DATE'}
 }
 
-# Mapping for OD Dashboard (9 Parts)
 od_parts_map = {
     'Oil': {'rem': 'MDA OIL Remaining Hours', 'date': 'MDA Oil R Date', 'due': 'OIL DUE DATE'},
     'AF': {'rem': 'AF Remaining Hours', 'date': 'MDA AF R Date', 'due': 'AF DUE DATE'},
@@ -72,15 +72,15 @@ od_parts_map = {
     'AOS': {'rem': 'AOS Remaining Hours', 'date': 'MDA AOS R Date', 'due': 'AOS DUE DATE'},
     'RGT': {'rem': 'RGT Remaining Hours', 'date': 'MDA RGT R Date', 'due': 'RGT DUE DATE'},
     'Valvekit': {'rem': 'Valve Kit Remaining Hours', 'date': 'MDA Valvekit R Date', 'due': 'VALVEKIT DUE DATE'},
-    'PF': {'rem': 'MDA PF R DATE', 'date': 'MDA PF R DATE', 'due': 'PF DUE DATE'},
-    'FF': {'rem': 'MDA FF R DATE', 'date': 'MDA FF R DATE', 'due': 'FF DUE DATE'},
-    'CF': {'rem': 'MDA CF R DATE', 'due': 'MDA CF R DATE', 'due_alt': 'CF DUE DATE'}
+    'PF': {'rem': 'PF DUE', 'date': 'MDA PF R DATE', 'due': 'PF DUE DATE'},
+    'FF': {'rem': 'FF DUE', 'date': 'MDA FF R DATE', 'due': 'FF DUE DATE'},
+    'CF': {'rem': 'CF DUE', 'date': 'MDA CF R DATE', 'due': 'CF DUE DATE'}
 }
 
 # --- 1. STANDARD TRACKER ---
-if page == "Standard Tracker":
+if page == "Standard Machine Tracker":
     st.title("🛠️ Standard Machine Tracker")
-    if master_df.empty: st.warning("Master_Data load nahi hui.")
+    if master_df.empty: st.warning("Master_Data file missing!")
     else:
         cust_list = sorted(master_df['CUSTOMER NAME'].unique().astype(str))
         sel_cust = st.sidebar.selectbox("Customer", options=["All"] + cust_list)
@@ -91,8 +91,8 @@ if page == "Standard Tracker":
             row = df_f[df_f['Fabrication No'].astype(str) == sel_fab].iloc[0]
             curr_hmr = pd.to_numeric(row.get('HMR Cal.', 0), errors='coerce')
             last_hmr = pd.to_numeric(row.get('Last Call HMR', 0), errors='coerce')
-            elapsed = curr_hmr - last_hmr if curr_hmr > last_hmr else 0
-
+            elapsed = (curr_hmr - last_hmr) if curr_hmr > last_hmr else 0
+            
             c1, c2, c3, c4 = st.columns(4)
             with c1:
                 st.info("📋 Customer Info")
@@ -100,21 +100,21 @@ if page == "Standard Tracker":
                 st.write(f"**Model:** {row.get('MODEL', 'N/A')}")
             with c2:
                 st.info("📅 Replacement")
-                for p, cols in std_parts.items(): st.write(f"**{p}:** {format_dt(row.get(cols['date']))}")
+                for p, cls in std_parts.items(): st.write(f"**{p}:** {format_dt(row.get(cls['date']))}")
             with c3:
                 st.info("⚙️ Live Remaining")
-                for p, cols in std_parts.items():
-                    val = pd.to_numeric(row.get(cols['rem'], 0), errors='coerce')
-                    rem = int(val - elapsed)
-                    st.write(f"**{p}:** {rem} Hrs" if rem > 0 else f"**{p}:** 🚨 {rem} (Due)")
+                for p, cls in std_parts.items():
+                    val = pd.to_numeric(row.get(cls['rem'], 0), errors='coerce')
+                    rem = int((val if pd.notna(val) else 0) - elapsed)
+                    st.write(f"**{p}:** {rem} Hrs" if rem > 0 else f"**{p}:** 🚨 {rem}")
             with c4:
                 st.error("🚨 DUE DATES")
-                for p, cols in std_parts.items(): st.write(f"**{p} Due:** {format_dt(row.get(cols['due']))}")
+                for p, cls in std_parts.items(): st.write(f"**{p} Due:** {format_dt(row.get(cls['due']))}")
 
-# --- 2. OD MACHINE TRACKER (LIVE FIXED) ---
+# --- 2. OD MACHINE TRACKER ---
 elif page == "OD Machine Tracker":
     st.title("🛡️ OD Machine Tracker (Live Calculation)")
-    if master_od_df.empty: st.error("Master_OD_Data detect nahi hui.")
+    if master_od_df.empty: st.error("Master_OD_Data missing!")
     else:
         cust_list_od = sorted(master_od_df['Customer Name'].unique().astype(str))
         sel_cust_od = st.sidebar.selectbox("Customer (OD)", options=["All"] + cust_list_od)
@@ -123,16 +123,20 @@ elif page == "OD Machine Tracker":
 
         if sel_fab_od != "Select":
             row_od = df_od_f[df_od_f['Fabrication No'].astype(str) == sel_fab_od].iloc[0]
-            hmr_date = pd.to_datetime(row_od.get('MDA HMR Date'), errors='coerce')
-            days_passed = (pd.Timestamp(datetime.now().date()) - hmr_date).days if pd.notna(hmr_date) else 0
-            avg_hrs = pd.to_numeric(row_od.get('MDA AVG Running Hours Per Day', 0), errors='coerce')
-            elapsed_od = days_passed * (avg_hrs if pd.notna(avg_hrs) else 0)
+            hmr_dt = pd.to_datetime(row_od.get('MDA HMR Date'), errors='coerce')
+            days = (pd.Timestamp(datetime.now().date()) - hmr_dt).days if pd.notna(hmr_dt) else 0
+            avg = pd.to_numeric(row_od.get('MDA AVG Running Hours Per Day', 0), errors='coerce')
+            elapsed_od = days * (avg if pd.notna(avg) else 0)
 
             c1, c2, c3, c4 = st.columns(4)
             with c1:
-                st.info("📋 Info"); st.write(f"**Customer:** {row_od.get('Customer Name')}"); st.write(f"**Model:** {row_od.get('Model', 'N/A')}")
+                st.info("📋 Info")
+                st.write(f"**Customer:** {row_od.get('Customer Name')}")
+                st.write(f"**Model:** {row_od.get('Model', 'N/A')}")
+                st.write(f"**Category:** {row_od.get('Category', 'N/A')}")
             with c2:
-                st.info("📅 Replacement"); [st.write(f"**{p}:** {format_dt(row_od.get(cls['date']))}") for p, cls in od_parts_map.items()]
+                st.info("📅 Replacement")
+                for p, cls in od_parts_map.items(): st.write(f"**{p}:** {format_dt(row_od.get(cls['date']))}")
             with c3:
                 st.info("⚙️ Live Remaining")
                 for p, cls in od_parts_map.items():
@@ -140,28 +144,30 @@ elif page == "OD Machine Tracker":
                     rem = int((val if pd.notna(val) else 0) - elapsed_od)
                     st.write(f"**{p}:** {rem} Hrs" if rem > 0 else f"**{p}:** 🚨 {rem}")
             with c4:
-                st.error("🚨 DUE DATES"); [st.write(f"**{p} Due:** {format_dt(row_od.get(cls['due']))}") for p, cls in od_parts_map.items()]
+                st.error("🚨 DUE DATES")
+                for p, cls in od_parts_map.items(): st.write(f"**{p} Due:** {format_dt(row_od.get(cls['due']))}")
 
-# --- 3. FOC TRACKER LIST ---
+# --- 3. FOC TRACKER ---
 elif page == "FOC Tracker List":
     st.title("📦 Master FOC Tracker List")
-    query = st.text_input("🔍 Search Customer or Part", "")
+    query = st.text_input("🔍 Search Customer or Part No", "")
     f_disp = foc_df[foc_df.astype(str).apply(lambda x: x.str.contains(query, case=False)).any(axis=1)] if query else foc_df
     st.dataframe(f_disp, use_container_width=True, hide_index=True)
 
-# --- 4. SERVICE PENDING LIST (FIXED & RESTORED) ---
+# --- 4. SERVICE PENDING LIST ---
 elif page == "Service Pending List":
-    st.title("⏳ Service Pending Dashboard")
+    st.title("⏳ Combined Service Pending Dashboard")
     b1, b2, b3 = st.columns(3)
     p_df = pd.DataFrame()
     
-    # Combined Pending Logic (Standard + OD)
-    if b1.button("🔴 Overdue"):
+    if b1.button("🔴 Overdue Units"):
+        # Combine Overdue from both files
         p_std = master_df[master_df.get('BIS Over Due', 0) != 0].copy() if not master_df.empty else pd.DataFrame()
         p_od = master_od_df[master_od_df.get('Over Due', 0) != 0].copy() if not master_od_df.empty else pd.DataFrame()
-        p_df = pd.concat([p_std, p_od.rename(columns={'Customer Name':'CUSTOMER NAME'})], ignore_index=True, sort=False)
+        # Standardize names to combine
+        if not p_od.empty: p_od = p_od.rename(columns={'Customer Name': 'CUSTOMER NAME', 'Over Due': 'BIS Over Due'})
+        p_df = pd.concat([p_std, p_od], ignore_index=True, sort=False)
 
     if not p_df.empty:
-        st.success(f"Records Found: {len(p_df)}")
-        st.download_button("📊 Export Pending List", to_excel(p_df), "Pending_List.xlsx")
-        st.dataframe(p_df[['CUSTOMER NAME', 'Fabrication No', 'OIL DUE DATE', 'AFC DUE DATE', 'AOS DUE DATE']], use_container_width=True)
+        st.success(f"Total Pending Units Found: {len(p_df)}")
+        st.dataframe(p_df[['CUSTOMER NAME', 'Fabrication No', 'OIL DUE DATE', 'AOS DUE DATE']], use_container_width=True)
