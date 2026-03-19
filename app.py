@@ -72,11 +72,11 @@ def create_pdf(title, info_dict, table_df=None):
 master_df, service_df, foc_df, missing = load_data()
 if missing: st.error(f"Error: {missing}"); st.stop()
 
-# --- SIDEBAR & SEARCH ---
+# --- SIDEBAR ---
 st.sidebar.title("📌 Navigation")
 page = st.sidebar.radio("Select Dashboard:", ["Machine Tracker", "FOC Tracker List", "Service Pending List"])
 
-# Mapping for 9 Parts (Column names in Excel vs Display Labels)
+# Mapping for 9 Parts
 parts_map = {
     'Oil': {'rem': 'HMR - Oil remaining', 'date': 'Oil Replacement Date', 'due': 'OIL DUE DATE'},
     'AFC': {'rem': 'Air filter replaced - Compressor Remaining Hours', 'date': 'Air filter Compressor Replaced Date', 'due': 'AFC DUE DATE'},
@@ -92,10 +92,10 @@ parts_map = {
 if page == "Machine Tracker":
     st.title("🛠️ Machine Tracker Pro")
     customer_list = sorted(master_df['CUSTOMER NAME'].unique().astype(str))
-    selected_customer = st.sidebar.selectbox("Select Customer", options=["All"] + customer_list)
+    selected_customer = st.sidebar.selectbox("1. Customer", options=["All"] + customer_list)
     cust_filtered = master_df if selected_customer == "All" else master_df[master_df['CUSTOMER NAME'] == selected_customer]
     
-    # METRICS & CATEGORY
+    # METRICS
     m1, m2, m3 = st.columns(3)
     t_u = len(cust_filtered)
     w_col = next((c for c in cust_filtered.columns if 'warranty type' in c.lower()), 'Warranty Type')
@@ -109,7 +109,7 @@ if page == "Machine Tracker":
         for i, (name, count) in enumerate(counts.items()): cols[i%4].write(f"🔹 **{name}:** `{count}`")
     st.divider()
 
-    selected_fab = st.sidebar.selectbox("Select Fabrication No", options=["Select"] + sorted(cust_filtered['Fabrication No'].astype(str).unique()))
+    selected_fab = st.sidebar.selectbox("2. Fabrication No", options=["Select"] + sorted(cust_filtered['Fabrication No'].astype(str).unique()))
 
     if selected_fab != "Select":
         m_info = cust_filtered[cust_filtered['Fabrication No'].astype(str) == selected_fab].iloc[0]
@@ -120,41 +120,55 @@ if page == "Machine Tracker":
         last_hmr = pd.to_numeric(m_info.get('Last Call HMR', 0), errors='coerce')
         elapsed = curr_hmr - last_hmr if curr_hmr > last_hmr else 0
 
-        # C1 to C4
+        # --- C1 to C4 DISPLAY ---
         c1, c2, c3, c4 = st.columns(4)
         with c1:
-            st.info("📋 Info")
+            st.info("📋 Customer Info")
             st.write(f"**Customer:** {m_info.get('CUSTOMER NAME')}")
-            st.write(f"**HMR Cal:** {curr_hmr}")
+            st.write(f"**Location:** {m_info.get('LOCATION', 'N/A')}")
+            st.write(f"**Contact:** {m_info.get('CONTACT NO.', 'N/A')}")
+            st.write(f"**Model:** {m_info.get('MODEL', 'N/A')}")
+            st.write(f"**Sl No:** {m_info.get('SL NO.', 'N/A')}")
             st.write(f"**Category:** {m_info.get(cat_col, 'N/A')}")
+            st.write(f"**HMR Cal:** {curr_hmr}")
+            st.write(f"**Last Service Date:** {format_dt(m_info.get('Last Call HMR Date'))}")
+            
         with c2:
             st.info("📅 Replacement (9 Parts)")
-            for p, cols in parts_map.items(): st.write(f"**{p}:** {format_dt(m_info.get(cols['date']))}")
+            for p, cls in parts_map.items(): st.write(f"**{p}:** {format_dt(m_info.get(cls['date']))}")
         with c3:
             st.info("⚙️ Live Remaining (9 Parts)")
-            for p, cols in parts_map.items():
-                val = pd.to_numeric(m_info.get(cols['rem'], 0), errors='coerce')
+            for p, cls in parts_map.items():
+                val = pd.to_numeric(m_info.get(cls['rem'], 0), errors='coerce')
                 rem = int(val - elapsed) if not pd.isna(val) else 0
                 st.write(f"**{p}:** {rem} Hrs" if rem > 0 else f"**{p}:** 🚨 {rem} (Due)")
         with c4:
             st.error("🚨 DUE DATES (9 Parts)")
-            for p, cols in parts_map.items(): st.write(f"**{p}:** {format_dt(m_info.get(cols['due']))}")
+            for p, cls in parts_map.items(): st.write(f"**{p}:** {format_dt(m_info.get(cls['due']))}")
 
         st.divider()
         ex1, ex2 = st.columns(2)
-        ex1.download_button("📊 Export Excel", to_excel(history), f"History_{selected_fab}.xlsx")
-        ex2.download_button("📄 Export Full PDF", create_pdf("Report", {"Fab": selected_fab}, history), f"Report_{selected_fab}.pdf")
+        ex1.download_button("📊 Export History (Excel)", to_excel(history), f"History_{selected_fab}.xlsx")
+        ex2.download_button("📄 Export Report (PDF)", create_pdf("Report", {"Fab": selected_fab, "Customer": m_info.get('CUSTOMER NAME')}, history), f"Report_{selected_fab}.pdf")
+
+        # FOC & History sections (unchanged)
+        st.divider(); st.subheader("🎁 FOC Parts")
+        f_col = 'FABRICATION NO' if 'FABRICATION NO' in foc_df.columns else 'FABRICATION NO.'
+        foc_match = foc_df[foc_df[f_col].astype(str) == selected_fab].copy()
+        if not foc_match.empty: st.dataframe(foc_match[['Failure Material Details', 'Part Code', 'Qty', 'ELGI IVOICE NO.']], use_container_width=True, hide_index=True)
+        
+        st.divider(); st.subheader("🕒 Service History")
+        for _, row in history.iterrows():
+            with st.expander(f"📅 {format_dt(row.get('Call Logged Date'))} | ⚙️ {row.get('Call HMR')} HMR"):
+                st.write(f"**Engineer:** {row.get('Service Engineer', 'N/A')}")
+                st.info(row.get('Service Engineer Comments', 'N/A'))
 
 elif page == "FOC Tracker List":
-    st.title("📦 Master FOC Tracker List")
-    # SEARCH BAR
-    search_query = st.text_input("🔍 Search by Customer Name, FOC No or Part Code", "")
-    if search_query:
-        foc_display = foc_df[foc_df.astype(str).apply(lambda x: x.str.contains(search_query, case=False)).any(axis=1)]
-    else: foc_display = foc_df
-    
-    st.download_button("📊 Export Excel", to_excel(foc_display), "FOC_List.xlsx")
-    st.dataframe(foc_display, use_container_width=True, hide_index=True)
+    st.title("📦 Master FOC List")
+    query = st.text_input("🔍 Search Customer, Part or FOC No", "")
+    f_disp = foc_df[foc_df.astype(str).apply(lambda x: x.str.contains(query, case=False)).any(axis=1)] if query else foc_df
+    st.download_button("📊 Download Excel", to_excel(f_disp), "FOC_List.xlsx")
+    st.dataframe(f_disp, use_container_width=True, hide_index=True)
 
 elif page == "Service Pending List":
     st.title("⏳ Service Pending")
@@ -163,6 +177,4 @@ elif page == "Service Pending List":
     if b1.button("🔴 Overdue"): p_df = master_df[master_df.get('BIS Over Due', 0) != 0].copy()
     if b2.button("🟡 Current Month"): p_df = master_df[master_df.get('BIS Current Month Due', 0) != 0].copy()
     if b3.button("🟢 Next Month"): p_df = master_df[master_df.get('BIS Next Month Due', 0) != 0].copy()
-    
-    if not p_df.empty:
-        st.dataframe(p_df[['CUSTOMER NAME', 'Fabrication No', 'OIL DUE DATE', 'AFC DUE DATE', 'AOS DUE DATE']], use_container_width=True)
+    if not p_df.empty: st.dataframe(p_df[['CUSTOMER NAME', 'Fabrication No', 'OIL DUE DATE', 'AFC DUE DATE', 'AOS DUE DATE']], use_container_width=True)
