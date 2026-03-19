@@ -29,7 +29,6 @@ def load_data():
         s_df = pd.read_excel(s_name, engine='openpyxl')
         f_df = pd.read_excel(f_name, engine='openpyxl')
         
-        # Headers Cleaning
         m_df.columns = [str(c).strip() for c in m_df.columns]
         s_df.columns = [str(c).strip() for c in s_df.columns]
         
@@ -94,20 +93,34 @@ if missing:
 
 # --- SIDEBAR ---
 st.sidebar.title("📌 Navigation")
-page = st.sidebar.radio("Go to:", ["Machine Tracker", "FOC Tracker List", "Service Pending List"])
+page = st.sidebar.radio("Option Chunein:", ["Machine Tracker", "FOC Tracker List", "Service Pending List"])
 
 # --- 1. MACHINE TRACKER ---
 if page == "Machine Tracker":
     st.title("🛠️ Machine Tracker Pro")
     customer_list = sorted(master_df['CUSTOMER NAME'].unique().astype(str))
-    selected_customer = st.sidebar.selectbox("1. Customer", options=["All"] + customer_list)
+    selected_customer = st.sidebar.selectbox("1. Customer Select Karein", options=["All"] + customer_list)
     cust_filtered = master_df if selected_customer == "All" else master_df[master_df['CUSTOMER NAME'] == selected_customer]
     
-    # Metrics
+    # METRICS SECTION
+    st.subheader(f"📊 Summary: {selected_customer}")
     m1, m2, m3 = st.columns(3)
     t_u = len(cust_filtered)
     n_w = len(cust_filtered[cust_filtered['Warranty Type'].str.contains('Non', na=False, case=False)])
-    m1.metric("Total Units", t_u); m2.metric("In Warranty", t_u - n_w); m3.metric("Non-Warranty", n_w)
+    m1.metric("Total Units", t_u)
+    m2.metric("In Warranty", t_u - n_w)
+    m3.metric("Non-Warranty", n_w)
+
+    # --- NAYA UPDATE: CATEGORY WISE COUNT ---
+    with st.expander("📂 View Category Wise Unit Count"):
+        if 'Warranty Type' in cust_filtered.columns:
+            cat_counts = cust_filtered['Warranty Type'].value_counts()
+            c_cols = st.columns(len(cat_counts) if len(cat_counts) > 0 else 1)
+            for i, (cat_name, count) in enumerate(cat_counts.items()):
+                c_cols[i % len(c_cols)].write(f"**{cat_name}:** {count}")
+        else:
+            st.warning("Warranty Type column nahi mila.")
+    
     st.divider()
 
     selected_fab = st.sidebar.selectbox("2. Fabrication No", options=["Select"] + sorted(cust_filtered['Fabrication No'].astype(str).unique()))
@@ -116,7 +129,7 @@ if page == "Machine Tracker":
         m_info = cust_filtered[cust_filtered['Fabrication No'].astype(str) == selected_fab].iloc[0]
         history = service_df[service_df['Fabrication Number'].astype(str) == selected_fab].copy().sort_values(by='Call Logged Date', ascending=False)
         
-        # Export
+        # Export Buttons
         ex1, ex2 = st.columns(2)
         ex1.download_button("📊 Export Excel", to_excel(history), f"History_{selected_fab}.xlsx")
         ex2.download_button("📄 Export PDF Report", create_pdf("Machine Detail Report", {"Fab": selected_fab, "Customer": m_info['CUSTOMER NAME']}, history), f"Report_{selected_fab}.pdf")
@@ -151,30 +164,27 @@ if page == "Machine Tracker":
             st.write(f"**AFC Due:** {format_dt(m_info.get('AFC DUE DATE'))}")
             st.write(f"**AOS Due:** {format_dt(m_info.get('AOS DUE DATE'))}")
 
-        # FOC for this machine
+        # FOC
         st.divider(); st.subheader("🎁 FOC Parts History")
         f_col = 'FABRICATION NO' if 'FABRICATION NO' in foc_df.columns else 'FABRICATION NO.'
         foc_match = foc_df[foc_df[f_col].astype(str) == selected_fab].copy()
         if not foc_match.empty:
             st.dataframe(foc_match[['Failure Material Details', 'Part Code', 'Qty', 'ELGI IVOICE NO.']], use_container_width=True, hide_index=True)
 
-        # Service History
+        # History
         st.divider(); st.subheader("🕒 Service History")
         if not history.empty:
             for _, row in history.iterrows():
                 with st.expander(f"📅 {format_dt(row.get('Call Logged Date'))} | ⚙️ {row.get('Call HMR')} HMR | 🛠️ {row.get('Call Type','N/A')}"):
                     st.write(f"**Engineer:** {row.get('Service Engineer', 'N/A')}")
                     st.info(row.get('Service Engineer Comments', 'N/A'))
-        else: st.warning("No history found.")
 
 # --- 2. FOC TRACKER LIST ---
 elif page == "FOC Tracker List":
     st.title("📦 Master FOC Tracker List")
     f_cols = ['Created On', 'FOC Number', 'Call Tracking Number', 'Customer Name', 'FOC Type', 'FOC Category', 'FOC Status', 'DEALER INVOICE NO./ DATE', 'Failure Material Details', 'Part Code', 'Qty', 'ELGI IVOICE NO.', 'AO Number', 'LR Number']
     available = [c for c in f_cols if c in foc_df.columns]
-    
     st.download_button("📊 Export FOC Excel", to_excel(foc_df[available]), "FOC_Master.xlsx")
-    st.download_button("📄 Export FOC PDF", create_pdf("FOC Master List", {"Total": len(foc_df)}, foc_df[available]), "FOC_List.pdf")
     st.dataframe(foc_df[available], use_container_width=True, hide_index=True)
 
 # --- 3. SERVICE PENDING LIST ---
@@ -189,8 +199,6 @@ elif page == "Service Pending List":
     if not p_df.empty:
         st.success(f"Records Found: {len(p_df)}")
         st.download_button("📊 Export Pending Excel", to_excel(p_df), "Pending.xlsx")
-        st.download_button("📄 Export Pending PDF", create_pdf("Service Pending List", {"Count": len(p_df)}, p_df[['CUSTOMER NAME', 'Fabrication No', 'OIL DUE DATE']]), "Pending.pdf")
-        
         disp = ['CUSTOMER NAME', 'Fabrication No', 'OIL DUE DATE', 'AFC DUE DATE', 'AOS DUE DATE']
         table = p_df[disp].copy()
         for c in ['OIL DUE DATE', 'AFC DUE DATE', 'AOS DUE DATE']: table[c] = table[c].apply(format_dt)
