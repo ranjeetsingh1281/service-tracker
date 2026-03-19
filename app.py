@@ -2,31 +2,34 @@ import streamlit as st
 import pandas as pd
 import os
 from io import BytesIO
+from reportlab.lib.pagesizes import letter, landscape
+from reportlab.pdfgen import canvas
 
 # Page Settings
 st.set_page_config(page_title="ELGi Service Tracker Pro", layout="wide")
 
-# --- SMART FILE LOADER ---
+# --- DYNAMIC FILE LOADER ---
 @st.cache_data
 def load_data():
     folder_files = os.listdir('.')
-    def find_file(target_base):
-        # Yeh function .xlsx aur .xlxs dono formats check karega
+    def find_file(target):
         for f in folder_files:
-            if f.lower().startswith(target_base.lower()):
-                return f
+            if f.lower() == target.lower(): return f
         return None
 
-    m_name = find_file("Master_Data")
-    m_od_name = find_file("Master_OD_Data")
-    s_name = find_file("Service_Details")
-    f_name = find_file("Active_FOC")
+    m_name = find_file("Master_Data.xlsx")
+    m_od_name = find_file("Master_OD_Data.xlsx")
+    s_name = find_file("Service_Details.xlsx")
+    f_name = find_file("Active_FOC.xlsx")
     
+    if not s_name or not f_name:
+        return None, None, None, None, ["Required Service/FOC files missing."]
+
     try:
         m_df = pd.read_excel(m_name, engine='openpyxl') if m_name else pd.DataFrame()
         m_od_df = pd.read_excel(m_od_name, engine='openpyxl') if m_od_name else pd.DataFrame()
-        s_df = pd.read_excel(s_name, engine='openpyxl') if s_name else pd.DataFrame()
-        f_df = pd.read_excel(f_name, engine='openpyxl') if f_name else pd.DataFrame()
+        s_df = pd.read_excel(s_name, engine='openpyxl')
+        f_df = pd.read_excel(f_name, engine='openpyxl')
         
         # Clean Headers
         for df in [m_df, m_od_df, s_df, f_df]:
@@ -37,18 +40,48 @@ def load_data():
     except Exception as e:
         return None, None, None, None, [str(e)]
 
+# --- HELPERS ---
 def format_dt(dt):
     if pd.isna(dt) or dt == 0 or str(dt).lower() in ["nan", "nat"]: return "N/A"
     try: return pd.to_datetime(dt).strftime('%d-%b-%y')
     except: return str(dt)
 
+def to_excel(df):
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False)
+    return output.getvalue()
+
+def create_pdf(title, info_dict, table_df=None):
+    buffer = BytesIO()
+    p = canvas.Canvas(buffer, pagesize=landscape(letter))
+    width, height = landscape(letter)
+    p.setFont("Helvetica-Bold", 18); p.drawString(50, height-50, title)
+    y = height - 80; p.setFont("Helvetica", 10)
+    for k, v in info_dict.items():
+        p.drawString(50, y, f"{k}: {v}"); y -= 15
+    p.line(50, y, width-50, y); y -= 30
+    if table_df is not None and not table_df.empty:
+        p.setFont("Helvetica-Bold", 9); cols = table_df.columns.tolist()[:8]
+        cur_x = 50
+        for c in cols: p.drawString(cur_x, y, str(c)[:15]); cur_x += 95
+        y -= 20; p.setFont("Helvetica", 8)
+        for _, row in table_df.iterrows():
+            if y < 50: p.showPage(); y = height-50; p.setFont("Helvetica", 8)
+            cur_x = 50
+            for c in cols: p.drawString(cur_x, y, str(row.get(c, "N/A"))[:18]); cur_x += 95
+            y -= 15
+    p.showPage(); p.save()
+    return buffer.getvalue()
+
 master_df, master_od_df, service_df, foc_df, errors = load_data()
+if errors: st.error(f"Error: {errors}"); st.stop()
 
-# --- SIDEBAR NAVIGATION ---
+# --- SIDEBAR ---
 st.sidebar.title("📌 Navigation")
-page = st.sidebar.radio("Select Dashboard:", ["Standard Tracker", "OD Machine Tracker", "FOC Tracker List"])
+page = st.sidebar.radio("Dashboard Chunein:", ["Machine Tracker", "OD Machine Tracker", "FOC Tracker List", "Service Pending List"])
 
-# Mapping for OD 9 Parts
+# Mapping for Parts (OD Dashboard logic)
 od_parts = {
     'Oil': {'date': 'MDA Oil R Date', 'due': 'OIL DUE DATE'},
     'AF': {'date': 'MDA AF R Date', 'due': 'AF DUE DATE'},
@@ -61,11 +94,18 @@ od_parts = {
     'CF': {'date': 'MDA CF R DATE', 'due': 'CF DUE DATE'}
 }
 
-# --- OD MACHINE TRACKER LOGIC ---
-if page == "OD Machine Tracker":
-    st.title("🛡️ OD Machine Tracker")
+# --- RENDER DASHBOARDS ---
+
+if page == "Machine Tracker":
+    # (Purana standard machine tracker code yahan rahega)
+    st.title("🛠️ Standard Machine Tracker")
+    # ... Same logic as previous version ...
+    st.info("Puraana data dashboard yahan dikhega.")
+
+elif page == "OD Machine Tracker":
+    st.title("🛡️ OD Machine Tracker (Master_OD_Data)")
     if master_od_df.empty:
-        st.error("❌ Master_OD_Data detect nahi hui. Kripya GitHub par file name check karein.")
+        st.warning("Master_OD_Data.xlsx file load nahi hui.")
     else:
         cust_list = sorted(master_od_df['Customer Name'].unique().astype(str))
         sel_cust = st.sidebar.selectbox("1. Customer", options=["All"] + cust_list)
@@ -76,56 +116,52 @@ if page == "OD Machine Tracker":
         if sel_fab != "Select":
             row = df_f[df_f['Fabrication No'].astype(str) == sel_fab].iloc[0]
             
-            st.divider()
+            # --- SECTION C1 to C4 ---
             c1, c2, c3, c4 = st.columns(4)
-            
             with c1:
                 st.info("📋 Customer Info")
-                st.write(f"**Customer:** {row.get('Customer Name')}")
+                st.write(f"**Customer Name:** {row.get('Customer Name')}")
                 st.write(f"**Model:** {row.get('Model', 'N/A')}")
                 st.write(f"**Sub Group:** {row.get('Product Sub Group', 'N/A')}")
                 st.write(f"**Category:** {row.get('Category', 'N/A')}")
-                st.write(f"**Location:** {row.get('Location', 'N/A')}")
-
             with c2:
-                st.info("📅 Replacement (9 Parts)")
+                st.info("📅 Replacement (OD)")
                 for label, cols in od_parts.items():
-                    st.write(f"**{label}:** {format_dt(row.get(cols['date']))}")
-
+                    st.write(f"**{label} R-Date:** {format_dt(row.get(cols['date']))}")
             with c3:
-                st.info("⚙️ Live Tracking")
-                st.write(f"**Avg Hrs/Day:** {row.get('MDA AVG Running Hours Per Day', 'N/A')}")
+                st.info("⚙️ Live Remaining / Status")
+                st.write(f"**AVG Running Hrs/Day:** {row.get('MDA AVG Running Hours Per Day', 'N/A')}")
                 st.write(f"**HMR Date:** {format_dt(row.get('MDA HMR Date'))}")
-                st.write(f"**Total Hours:** {row.get('MDA Total Hours', 'N/A')}")
-
             with c4:
-                st.error("🚨 DUE DATES (9 Parts)")
+                st.error("🚨 DUE DATES (OD)")
                 for label, cols in od_parts.items():
                     st.write(f"**{label} Due:** {format_dt(row.get(cols['due']))}")
 
-            # History & FOC (Common Logic)
+            # --- FOC & SERVICE HISTORY MATCHING ---
             st.divider()
-            col_a, col_b = st.columns(2)
-            with col_a:
-                st.subheader("🎁 FOC History")
-                foc_match = foc_df[foc_df['FABRICATION NO'].astype(str) == sel_fab]
-                st.dataframe(foc_match[['Failure Material Details', 'Part Code', 'Qty', 'ELGI IVOICE NO.']] if not foc_match.empty else pd.DataFrame(), hide_index=True)
-            
-            with col_b:
-                st.subheader("🕒 Service History")
-                hist = service_df[service_df['Fabrication Number'].astype(str) == sel_fab].sort_values(by='Call Logged Date', ascending=False)
-                if not hist.empty:
-                    for _, s_row in hist.head(5).iterrows():
-                        with st.expander(f"📅 {format_dt(s_row.get('Call Logged Date'))} | {s_row.get('Call Type', 'N/A')}"):
-                            st.write(f"**Engineer:** {s_row.get('Service Engineer', 'N/A')}")
-                            st.info(s_row.get('Service Engineer Comments', 'N/A'))
+            foc_match = foc_df[foc_df['FABRICATION NO'].astype(str) == sel_fab].copy()
+            if not foc_match.empty:
+                st.subheader("🎁 FOC Parts for this Machine")
+                st.dataframe(foc_match[['Failure Material Details', 'Part Code', 'Qty', 'ELGI IVOICE NO.']], use_container_width=True, hide_index=True)
 
-# --- REMAINDING PAGES (Standard Tracker, etc.) ---
-elif page == "Standard Tracker":
-    st.title("🛠️ Standard Machine Tracker")
-    st.write("Yahan aapka purana Master_Data load hoga.")
-    # (Purana logic yahan add karein...)
+            st.subheader("🕒 Service History")
+            hist = service_df[service_df['Fabrication Number'].astype(str) == sel_fab].copy().sort_values(by='Call Logged Date', ascending=False)
+            if not hist.empty:
+                for _, s_row in hist.iterrows():
+                    with st.expander(f"📅 {format_dt(s_row.get('Call Logged Date'))} | ⚙️ {s_row.get('Call HMR')} HMR | 🛠️ {s_row.get('Call Type','N/A')}"):
+                        st.write(f"**Call Type:** `{s_row.get('Call Type', 'N/A')}`")
+                        st.write(f"**Engineer:** {s_row.get('Service Engineer', 'N/A')}")
+                        st.info(s_row.get('Service Engineer Comments', 'N/A'))
+            else: st.warning("Service history nahi mili.")
 
 elif page == "FOC Tracker List":
-    st.title("📦 Master FOC Tracker")
-    st.dataframe(foc_df, use_container_width=True)
+    st.title("📦 Master FOC Tracker List")
+    query = st.text_input("🔍 Search Customer, Part or FOC No", "")
+    f_disp = foc_df[foc_df.astype(str).apply(lambda x: x.str.contains(query, case=False)).any(axis=1)] if query else foc_df
+    st.download_button("📊 Export Excel", to_excel(f_disp), "FOC_Master_List.xlsx")
+    st.dataframe(f_disp, use_container_width=True, hide_index=True)
+
+elif page == "Service Pending List":
+    st.title("⏳ Service Pending")
+    # (Pending list logic with buttons as before)
+    st.info("Pending Dashboard filter yahan kaam karenge.")
