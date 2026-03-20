@@ -92,14 +92,14 @@ if main_choice == "DPSAC Tracker (Standard)":
                 st.write(f"**Model:** {row.get('MODEL')}"); st.write(f"**Location:** {row.get('LOCATION')}")
                 st.write(f"**Last Call HMR:** {row.get('Last Call HMR')}")
                 st.write(f"**Last Call Date:** {format_dt(row.get('Last Call HMR Date'))}")
-                st.write(f"**Avg. Run Hrs:** {row.get('Avg. Hrs')} 👈")
-                st.write(f"**Running Avg Hrs:** {row.get('HMR Cal.')} 👈")
+                st.write(f"**Avg. Run Hrs:** {row.get('Avg. Hrs')} 🕧")
+                st.write(f"**Running Hrs:** {row.get('HMR Cal.')} 🏃‍➡️")
                 
             with c2:
                 st.info("📅 Replacement")
                 for p, m in std_parts.items(): st.write(f"**{p}:** {format_dt(row.get(m['date']))}")
             with c3:
-                st.info("⚙️ Live Remaining")
+                st.info("🕧 Live Remaining")
                 for p, m in std_parts.items():
                     rem = int(pd.to_numeric(row.get(m['rem'], 0), errors='coerce') - elapsed)
                     st.write(f"**{p}:** {rem} Hrs" if rem > 0 else f"**{p}:** 🚨 {rem}")
