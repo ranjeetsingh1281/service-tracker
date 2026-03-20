@@ -23,8 +23,10 @@ def load_data():
         m_od_df = pd.read_excel(m_od_n, engine='openpyxl') if m_od_n else pd.DataFrame()
         s_df = pd.read_excel(s_n, engine='openpyxl') if s_n else pd.DataFrame()
         f_df = pd.read_excel(f_n, engine='openpyxl') if f_n else pd.DataFrame()
+        
         for d in [m_df, m_od_df, s_df, f_df]:
-            if not d.empty: d.columns = [str(c).strip() for c in d.columns]
+            if not d.empty: 
+                d.columns = [str(c).strip() for c in d.columns]
         return m_df, m_od_df, s_df, f_df
     except:
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
@@ -42,7 +44,7 @@ def to_excel(df):
 
 master_df, master_od_df, service_df, foc_df = load_data()
 
-# --- SIDEBAR MENU ---
+# --- SIDEBAR ---
 st.sidebar.title("🏢 ELGi Global Menu")
 page_choice = st.sidebar.radio("Go To Dashboard:", ["1. DPSAC Tracker", "2. INDUSTRIAL Tracker"])
 
@@ -52,16 +54,21 @@ page_choice = st.sidebar.radio("Go To Dashboard:", ["1. DPSAC Tracker", "2. INDU
 if page_choice == "1. DPSAC Tracker":
     st.title("🛠️ DPSAC Tracker - Standard Machine Data")
     
-    # --- UNIT STATUS METRICS (FORCE RENDER TOP) ---
+    # --- BULLETPROOF UNIT STATUS METRICS ---
     if not master_df.empty:
         s_col = next((c for c in master_df.columns if c.lower() == 'unit status'), None)
         if s_col:
-            st.markdown("### 📊 Unit Status Overview")
-            m1, m2, m3, m4 = st.columns(4)
-            m1.metric("📦 Total Units", len(master_df))
-            m2.metric("🟢 Active", len(master_df[master_df[s_col].astype(str).str.contains('Active', case=False, na=False)]))
-            m3.metric("🔵 Shifted", len(master_df[master_df[s_col].astype(str).str.contains('Shifted', case=False, na=False)]))
-            m4.metric("🟠 Sold", len(master_df[master_df[s_col].astype(str).str.contains('Sold', case=False, na=False)]))
+            t_total = len(master_df)
+            t_active = len(master_df[master_df[s_col].astype(str).str.contains('Active', case=False, na=False)])
+            t_shifted = len(master_df[master_df[s_col].astype(str).str.contains('Shifted', case=False, na=False)])
+            t_sold = len(master_df[master_df[s_col].astype(str).str.contains('Sold', case=False, na=False)])
+            
+            # Displaying using Markdown Table (Forces visibility even if metrics fail)
+            st.markdown(f"""
+            | 📦 Total Units | 🟢 Active | 🔵 Shifted | 🟠 Sold |
+            | :--- | :--- | :--- | :--- |
+            | **{t_total}** | **{t_active}** | **{t_shifted}** | **{t_sold}** |
+            """, unsafe_allow_html=True)
             st.divider()
 
     tabs = st.tabs(["Machine Tracker", "FOC List", "Service Pending"])
@@ -82,8 +89,10 @@ if page_choice == "1. DPSAC Tracker":
             c1, c2, c3, c4 = st.columns(4)
             with c1:
                 st.info("📋 Customer Info")
-                st.write(f"**Customer:** {row.get('CUSTOMER NAME')}\n**Model:** {row.get('MODEL')}\n**Location:** {row.get('LOCATION', 'None')}\n**Status:** `{row.get('Unit Status', 'N/A')}`")
-                st.write(f"**Warranty:** {row.get('Warranty Type', 'N/A')}\n**End:** {format_dt(row.get('Warranty End date'))}\n**Running Hrs:** {curr_h} 🏃‍➡️")
+                st.write(f"**Customer:** {row.get('CUSTOMER NAME')}\n**Model:** {row.get('MODEL')}\n**Location:** {row.get('LOCATION', 'None')}")
+                st.write(f"**Status:** `{row.get(s_col if s_col else 'Unit Status', 'N/A')}`")
+                st.write(f"**Warranty:** {row.get('Warranty Type', 'N/A')}\n**End:** {format_dt(row.get('Warranty End date'))}")
+                st.write(f"**Running Hrs:** {curr_h} 🏃‍➡️")
             with c2:
                 st.info("📅 Replacement (9 Parts)")
                 p_std = {'Oil':'Oil Replacement Date','AFC':'Air filter Compressor Replaced Date','AFE':'Air filter Engine Replaced Date','MOF':'Main Oil filter Replaced Date','ROF':'Return Oil filter Replaced Date','AOS':'AOS Replaced Date','RGT':'Greasing Done Date','1500K':'1500 Valve kit Replaced Date','3000K':'3000 Valve kit Replaced Date'}
@@ -101,15 +110,15 @@ if page_choice == "1. DPSAC Tracker":
                 for k, v in d_std.items(): st.write(f"**{k}:** {format_dt(row.get(v))}")
 
             st.divider()
-            f_match = foc_df[foc_df['FABRICATION NO'].astype(str) == sel_f]
+            f_m = foc_df[foc_df['FABRICATION NO'].astype(str) == sel_f]
             st.subheader("🎁 Machine FOC Details")
-            st.dataframe(f_match[['Created On','Part Code','Qty','ELGI IVOICE NO.']] if not f_match.empty else pd.DataFrame(), use_container_width=True)
+            st.dataframe(f_m[['Created On','Part Code','Qty','ELGI IVOICE NO.']] if not f_m.empty else pd.DataFrame(), use_container_width=True)
             
             st.subheader("🕒 Service History")
-            h_match = service_df[service_df['Fabrication Number'].astype(str) == sel_f].sort_values(by='Call Logged Date', ascending=False)
-            for _, s in h_match.iterrows():
+            h_m = service_df[service_df['Fabrication Number'].astype(str) == sel_f].sort_values(by='Call Logged Date', ascending=False)
+            for _, s in h_m.iterrows():
                 with st.expander(f"📅 {format_dt(s.get('Call Logged Date'))} | ⚙️ {s.get('Call HMR')} HMR | 🛠️ {s.get('Call Type')}"):
-                    st.write(f"**Engineer:** {s.get('Service Engineer')}\n**Comments:** {s.get('Service Engineer Comments')}")
+                    st.write(f"**Comments:** {s.get('Service Engineer Comments')}")
 
     with tabs[1]: # FOC List
         st.subheader("📦 DPSAC Master FOC List")
@@ -139,12 +148,12 @@ elif page_choice == "2. INDUSTRIAL Tracker":
     if not master_od_df.empty:
         s_col_i = next((c for c in master_od_df.columns if c.lower() == 'unit status'), None)
         if s_col_i:
-            st.markdown("### 📊 Unit Status Overview")
-            i1, i2, i3, i4 = st.columns(4)
-            i1.metric("📦 Total Units", len(master_od_df))
-            i2.metric("🟢 Active", len(master_od_df[master_od_df[s_col_i].astype(str).str.contains('Active', case=False, na=False)]))
-            i3.metric("🔵 Shifted", len(master_od_df[master_od_df[s_col_i].astype(str).str.contains('Shifted', case=False, na=False)]))
-            i4.metric("🟠 Sold", len(master_od_df[master_od_df[s_col_i].astype(str).str.contains('Sold', case=False, na=False)]))
+            ti_total = len(master_od_df)
+            ti_active = len(master_od_df[master_od_df[s_col_i].astype(str).str.contains('Active', case=False, na=False)])
+            ti_shifted = len(master_od_df[master_od_df[s_col_i].astype(str).str.contains('Shifted', case=False, na=False)])
+            ti_sold = len(master_od_df[master_od_df[s_col_i].astype(str).str.contains('Sold', case=False, na=False)])
+            
+            st.markdown(f"| 📦 Total Units | 🟢 Active | 🔵 Shifted | 🟠 Sold |\n| :--- | :--- | :--- | :--- |\n| **{ti_total}** | **{ti_active}** | **{ti_shifted}** | **{ti_sold}** |")
             st.divider()
 
     tabs_i = st.tabs(["Machine Tracker", "FOC List", "Service Pending"])
@@ -166,22 +175,22 @@ elif page_choice == "2. INDUSTRIAL Tracker":
             ci1, ci2, ci3, ci4 = st.columns(4)
             with ci1:
                 st.info("📋 Info")
-                st.write(f"**Customer:** {row_i.get('Customer Name')}\n**Model:** {row_i.get('Model')}\n**Location:** {row_i.get('Location', 'None')}\n**Status:** `{row_i.get('Unit Status', 'N/A')}`")
-                st.write(f"**Avg Run Hrs:** {avg_r} 🕧\n**Running Hrs:** {row_i.get('MDA Total Hours', 'N/A')} 🏃‍➡️")
+                st.write(f"**Customer:** {row_i.get('Customer Name')}\n**Model:** {row_i.get('Model')}\n**Status:** `{row_i.get(s_col_i if s_col_i else 'Unit Status', 'N/A')}`")
+                st.write(f"**Running Hrs:** {row_i.get('MDA Total Hours', 'N/A')} 🏃‍➡️")
             with ci2:
                 st.info("📅 Replacement (9 Parts)")
                 p_ind = {'Oil':'MDA Oil R Date','AF':'MDA AF R Date','OF':'MDA OF R Date','AOS':'MDA AOS R Date','RGT':'MDA RGT R Date','VK':'MDA Valvekit R Date','PF':'MDA PF R DATE','FF':'MDA FF R DATE','CF':'MDA CF R DATE'}
                 for k, v in p_ind.items(): st.write(f"**{k}:** {format_dt(row_i.get(v))}")
             with ci3:
                 st.info("⚙️ Live Remaining")
-                r_ind = {'Oil':'MDA OIL Remaining Hours','AF':'AF Remaining Hours','OF':'OF Remaining Hours','AOS':'AOS Remaining Hours','RGT':'RGT Remaining Hours','VK':'Valve Kit Remaining Hours','PF':'PF DUE','FF':'FF DUE','CF':'CF DUE'}
+                r_ind = {'Oil':'MDA OIL Remaining Hours','AF':'AF Remaining Hours','AOS':'AOS Remaining Hours','VK':'Valve Kit Remaining Hours','PF':'PF DUE','FF':'FF DUE','CF':'CF DUE'}
                 for k, v in r_ind.items():
                     val = pd.to_numeric(row_i.get(v, 0), errors='coerce')
                     rem = int((val if pd.notna(val) else 0) - elapsed_i)
                     st.write(f"**{k}:** {rem} Hrs" if rem > 0 else f"**{k}:** 🚨 {rem}")
             with ci4:
                 st.error("🚨 Due Date (9 Parts)")
-                d_ind = {'Oil':'OIL DUE DATE','AF':'AF DUE DATE','OF':'OF DUE DATE','AOS':'AOS DUE DATE','VK':'VALVEKIT DUE DATE','RGT':'RGT DUE DATE','PF':'PF DUE DATE','FF':'FF DUE DATE','CF':'CF DUE DATE'}
+                d_ind = {'Oil':'OIL DUE DATE','AF':'AF DUE DATE','AOS':'AOS DUE DATE','VK':'VALVEKIT DUE DATE','PF':'PF DUE DATE','FF':'FF DUE DATE','CF':'CF DUE DATE'}
                 for k, v in d_ind.items(): st.write(f"**{k}:** {format_dt(row_i.get(v))}")
 
             st.divider()
@@ -192,11 +201,11 @@ elif page_choice == "2. INDUSTRIAL Tracker":
             st.subheader("🕒 Service History")
             hi_m_i = service_df[service_df['Fabrication Number'].astype(str) == sel_f_i].sort_values(by='Call Logged Date', ascending=False)
             for _, si in hi_m_i.iterrows():
-                with st.expander(f"📅 {format_dt(si.get('Call Logged Date'))} | ⚙️ {si.get('Call HMR')} HMR | {si.get('Call Type')}"):
+                with st.expander(f"📅 {format_dt(si.get('Call Logged Date'))} | ⚙️ {si.get('Call HMR')} HMR"):
                     st.info(si.get('Service Engineer Comments'))
 
     with tabs_i[1]: # Industrial FOC List
-        st.subheader("📦 INDUSTRIAL FOC Tracker List")
+        st.subheader("📦 INDUSTRIAL Master FOC List")
         ind_fabs = master_od_df['Fabrication No'].astype(str).unique() if not master_od_df.empty else []
         f_list_i = foc_df[foc_df['FABRICATION NO'].astype(str).isin(ind_fabs)]
         st.download_button("📥 Export FOC List", to_excel(f_list_i), "Industrial_FOC.xlsx")
