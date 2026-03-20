@@ -162,7 +162,7 @@ elif main_choice == "INDUSTRIAL Tracker (Industrial)":
             st.subheader("🕒 Service History")
             h_match_i = service_df[service_df['Fabrication Number'].astype(str) == sel_f_i].sort_values(by='Call Logged Date', ascending=False)
             for _, s_row in h_match_i.iterrows():
-                with st.expander(f"📅 {format_dt(s_row.get('Call Logged Date'))} | {s_row.get('Call Type', 'N/A')}"):
+                with (f"📅 {format_dt(s_row.get('Call Logged Date'))} | 🎰 {row.get('Call HMR')} | 🗄️ {s_row.get('Call Type', 'N/A')}"):
                     st.write(f"**Engineer:** {s_row.get('Service Engineer', 'N/A')}")
                     st.info(s_row.get('Service Engineer Comments', 'N/A'))
 
