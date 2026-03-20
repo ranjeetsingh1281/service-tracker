@@ -117,7 +117,7 @@ if page_choice == "1. DPSAC Tracker":
             with col_f:
                 st.subheader("🎁 FOC Details")
                 f_match = foc_df[foc_df['FABRICATION NO'].astype(str) == sel_f]
-                st.dataframe(f_match[['Created On', 'Part Code', 'Qty', 'ELGI IVOICE NO.']] if not f_match.empty else pd.DataFrame(), use_container_width=True)
+                st.dataframe(f_match[['Created On', 'FOC Status', 'Part Code', 'Qty', 'ELGI IVOICE NO.']] if not f_match.empty else pd.DataFrame(), use_container_width=True)
             with col_h:
                 st.subheader("🕒 Service History")
                 h_match = service_df[service_df['Fabrication Number'].astype(str) == sel_f].sort_values(by='Call Logged Date', ascending=False)
