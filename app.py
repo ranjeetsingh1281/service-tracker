@@ -67,13 +67,13 @@ ind_parts = {
 
 # --- SIDEBAR MENU ---
 st.sidebar.title("🏢 ELGi Global Menu")
-page_choice = st.sidebar.radio("Go To Page:", ["1. DPSAC Tracker", "2. INDUSTRIAL Tracker"])
+page_choice = st.sidebar.radio("Go To Page:", ["1. DPSAC Tracker", "2. EPSAC Tracker"])
 
 # ==========================================
-# PAGE 1: DPSAC TRACKER (Standard Data)
+# PAGE 1: DPSAC TRACKER
 # ==========================================
 if page_choice == "1. DPSAC Tracker":
-    st.title("🛠️ DPSAC Tracker - Standard Machine Data")
+    st.title("🛠️ DPSAC Tracker - Units Data")
     tabs = st.tabs(["Machine Tracker", "FOC List", "Service Pending"])
     
     with tabs[0]: # Machine Tracker
@@ -93,7 +93,7 @@ if page_choice == "1. DPSAC Tracker":
             c1, c2, c3, c4 = st.columns(4)
             with c1:
                 st.info("📋 Info")
-                st.write(f"**Customer:** {row.get('CUSTOMER NAME')}\n**Model:** {row.get('MODEL')}\n**Sl No:** {row.get('SL NO.')}\n**Location:** {row.get('LOCATION')}\n**Current HMR:** {curr_h}")
+                st.write(f"**Customer:** {row.get('CUSTOMER NAME')}\n**Model:** {row.get('MODEL')}\n**Last Call HMR:** {row.get('Last Call HMR')}\n**Last Call Date:** {row.get('Last Call HMR Date')}\n"**Avg. Run Hrs:** {row.get('Avg. Hrs')}🕧"\n**Current HMR:** {curr_h}")
             with c2:
                 st.info("📅 Replacement Date")
                 for p, m in std_parts.items(): st.write(f"**{p}:** {format_dt(row.get(m['date']))}")
