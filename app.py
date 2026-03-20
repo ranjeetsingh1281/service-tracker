@@ -91,10 +91,9 @@ if main_choice == "DPSAC Tracker (Standard)":
                 st.write(f"**Customer:** {row.get('CUSTOMER NAME')}")
                 st.write(f"**Model:** {row.get('MODEL')}"); st.write(f"**Location:** {row.get('LOCATION')}")
                 st.write(f"**Avg. Run Hrs:** {row.get('Avg. Hrs')} 👈")
-                st.write(f"**Calculated Avg Hrs:** {row.get('HMR Cal.')} 👈")
-                st.write(f"**HMR Cal:** {curr_h} 👈")
+                st.write(f"**Running Avg Hrs:** {row.get('HMR Cal.')} 👈")
                 st.write(f"**Last Call HMR:** {row.get('Last Call HMR')}")
-                st.write(f"**Last Call HMR Date:** {format_dt(row.get('Last Call HMR Date'))}")
+                st.write(f"**Last Call Date:** {format_dt(row.get('Last Call HMR Date'))}")
                 
             with c2:
                 st.info("📅 Replacement")
