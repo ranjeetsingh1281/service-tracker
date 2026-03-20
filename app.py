@@ -94,12 +94,11 @@ if main_choice == "DPSAC Tracker (Standard)":
                 st.write(f"**Last Call Date:** {format_dt(row.get('Last Call HMR Date'))}")
                 st.write(f"**Avg. Run Hrs:** {row.get('Avg. Hrs')} 🕧")
                 st.write(f"**Running Hrs:** {row.get('HMR Cal.')} 🏃‍➡️")
-                
             with c2:
                 st.info("📅 Replacement")
                 for p, m in std_parts.items(): st.write(f"**{p}:** {format_dt(row.get(m['date']))}")
             with c3:
-                st.info("🕧 Live Remaining")
+                st.info("⚙️ Live Remaining")
                 for p, m in std_parts.items():
                     rem = int(pd.to_numeric(row.get(m['rem'], 0), errors='coerce') - elapsed)
                     st.write(f"**{p}:** {rem} Hrs" if rem > 0 else f"**{p}:** 🚨 {rem}")
@@ -116,16 +115,16 @@ if main_choice == "DPSAC Tracker (Standard)":
             st.subheader("🕒 Service History")
             h_match = service_df[service_df['Fabrication Number'].astype(str) == sel_f].sort_values(by='Call Logged Date', ascending=False)
             for _, s_row in h_match.iterrows():
-                with st.expander(f"📅 {format_dt(s_row.get('Call Logged Date'))} | ⏱️ {s_row.get('Call HMR')} | 📝 {s_row.get('Call Type', 'N/A')}"):
+                with st.expander(f"📅 {format_dt(s_row.get('Call Logged Date'))} | {s_row.get('Call Type', 'N/A')}"):
                     st.write(f"**Engineer:** {s_row.get('Service Engineer', 'N/A')}")
                     st.info(s_row.get('Service Engineer Comments', 'N/A'))
 
 # --- 2. INDUSTRIAL SECTION ---
-elif main_choice == "INDUSTRIAL Tracker":
+elif main_choice == "INDUSTRIAL Tracker (Industrial)":
     sub = st.sidebar.selectbox("Industrial Options:", ["Machine Tracker", "FOC List", "Service Pending"])
     
     if sub == "Machine Tracker":
-        st.title("🛡️ INDUSTRIAL Tracker")
+        st.title("🛡️ INDUSTRIAL Machine Tracker")
         c_list_i = sorted(master_od_df['Customer Name'].unique().astype(str))
         sel_c_i = st.sidebar.selectbox("Customer Name", ["All"] + c_list_i, key="i_c")
         df_f_i = master_od_df if sel_c_i == "All" else master_od_df[master_od_df['Customer Name'] == sel_c_i]
@@ -168,3 +167,4 @@ elif main_choice == "INDUSTRIAL Tracker":
                     st.info(s_row.get('Service Engineer Comments', 'N/A'))
 
 # --- FOC & PENDING (Logic Remains same as before for both) ---
+
