@@ -47,11 +47,12 @@ st.sidebar.title("🏢 ELGi Global Menu")
 page_choice = st.sidebar.radio("Go To Dashboard:", ["1. DPSAC Tracker", "2. INDUSTRIAL Tracker"])
 
 # ==========================================
-# 1. DPSAC TRACKER (Standard)
+# 1. DPSAC TRACKER SECTION (Standard)
 # ==========================================
 if page_choice == "1. DPSAC Tracker":
     st.title("🛠️ DPSAC Tracker - Standard Machine Data")
     
+    # Unit Status Metrics
     if not master_df.empty and 'Unit Status' in master_df.columns:
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("Total Units", len(master_df))
@@ -62,12 +63,12 @@ if page_choice == "1. DPSAC Tracker":
 
     tabs = st.tabs(["Machine Tracker", "FOC List", "Service Pending"])
     
-    with tabs[0]: 
+    with tabs[0]: # Machine Tracker
         col1, col2 = st.columns(2)
         c_list = sorted(master_df['CUSTOMER NAME'].unique().astype(str)) if not master_df.empty else []
-        sel_c = col1.selectbox("Select Customer Name", ["All"] + c_list, key="std_c")
+        sel_c = col1.selectbox("Select Customer Name", ["All"] + c_list, key="dpsac_c")
         df_f = master_df if sel_c == "All" else master_df[master_df['CUSTOMER NAME'] == sel_c]
-        sel_f = col2.selectbox("Select Fabrication No", ["Select"] + sorted(df_f['Fabrication No'].astype(str).unique()), key="std_f")
+        sel_f = col2.selectbox("Select Fabrication No", ["Select"] + sorted(df_f['Fabrication No'].astype(str).unique()), key="dpsac_f")
         
         if sel_f != "Select":
             row = df_f[df_f['Fabrication No'].astype(str) == sel_f].iloc[0]
@@ -75,12 +76,16 @@ if page_choice == "1. DPSAC Tracker":
             last_h = pd.to_numeric(row.get('Last Call HMR', 0), errors='coerce')
             elapsed = (curr_h - last_h) if curr_h > last_h else 0
             
+            # --- C1-C4 SPACIOUS LAYOUT ---
             c1, c2, c3, c4 = st.columns(4)
             with c1:
                 st.info("📋 Customer Info")
-                st.write(f"**Customer:** {row.get('CUSTOMER NAME')}\n**Model:** {row.get('MODEL')}\n**Location:** {row.get('LOCATION', 'None')}")
+                st.write(f"**Customer:** {row.get('CUSTOMER NAME')}")
+                st.write(f"**Model:** {row.get('MODEL')}")
                 st.write(f"**Status:** `{row.get('Unit Status', 'N/A')}`")
-                st.write(f"**Warranty:** {row.get('Warranty Type', 'N/A')}\n**Start:** {format_dt(row.get('Warranty Start Date'))}\n**End:** {format_dt(row.get('Warranty End date'))}")
+                st.write(f"**Warranty:** {row.get('Warranty Type', 'N/A')}")
+                st.write(f"**Warr Start:** {format_dt(row.get('Warranty Start Date'))}")
+                st.write(f"**Warr End:** {format_dt(row.get('Warranty End date'))}")
                 st.write(f"**Running Hrs:** {curr_h} 🏃‍➡️")
             with c2:
                 st.info("📅 Replacement Date")
@@ -110,10 +115,10 @@ if page_choice == "1. DPSAC Tracker":
                     st.write(f"**Engineer:** {s.get('Service Engineer')}\n**Comments:** {s.get('Service Engineer Comments')}")
 
 # ==========================================
-# 2. INDUSTRIAL TRACKER (Industrial)
+# 2. INDUSTRIAL TRACKER SECTION (Industrial)
 # ==========================================
 elif page_choice == "2. INDUSTRIAL Tracker":
-    st.title("🛡️ INDUSTRIAL Tracker - OD Master Data")
+    st.title("🛡️ INDUSTRIAL Tracker - Industrial Data")
     
     if not master_od_df.empty and 'Unit Status' in master_od_df.columns:
         i1, i2, i3, i4 = st.columns(4)
@@ -127,10 +132,10 @@ elif page_choice == "2. INDUSTRIAL Tracker":
 
     with tabs_i[0]:
         col1_i, col2_i = st.columns(2)
-        c_l_i = sorted(master_od_df['Customer Name'].unique().astype(str)) if not master_od_df.empty else []
-        sel_c_i = col1_i.selectbox("Select Customer Name", ["All"] + c_l_i, key="ind_c")
+        c_list_i = sorted(master_od_df['Customer Name'].unique().astype(str)) if not master_od_df.empty else []
+        sel_c_i = col1_i.selectbox("Select Customer Name (IND)", ["All"] + c_list_i, key="ind_c_sel")
         df_f_i = master_od_df if sel_c_i == "All" else master_od_df[master_od_df['Customer Name'] == sel_c_i]
-        sel_f_i = col2_i.selectbox("Select Fabrication No", ["Select"] + sorted(df_f_i['Fabrication No'].astype(str).unique()), key="ind_f")
+        sel_f_i = col2_i.selectbox("Select Fabrication No (IND)", ["Select"] + sorted(df_f_i['Fabrication No'].astype(str).unique()), key="ind_f_sel")
 
         if sel_f_i != "Select":
             row_i = df_f_i[df_f_i['Fabrication No'].astype(str) == sel_f_i].iloc[0]
@@ -141,7 +146,7 @@ elif page_choice == "2. INDUSTRIAL Tracker":
 
             ci1, ci2, ci3, ci4 = st.columns(4)
             with ci1:
-                st.info("📋 Customer Info")
+                st.info("📋 Info")
                 st.write(f"**Customer:** {row_i.get('Customer Name')}\n**Model:** {row_i.get('Model')}\n**Location:** {row_i.get('Location', 'None')}")
                 st.write(f"**Status:** `{row_i.get('Unit Status', 'N/A')}`")
                 st.write(f"**Avg Run Hrs:** {avg_r} 🕧\n**Running Hrs:** {row_i.get('MDA Total Hours')} 🏃‍➡️")
@@ -162,15 +167,15 @@ elif page_choice == "2. INDUSTRIAL Tracker":
                 for k, v in d_ind.items(): st.write(f"**{k}:** {format_dt(row_i.get(v))}")
 
             st.divider()
-            # FIX: Match variable name here correctly
             f_match_i = foc_df[foc_df['FABRICATION NO'].astype(str) == sel_f_i]
             st.subheader("🎁 Machine FOC Details")
             st.dataframe(f_match_i[['Created On','Part Code','Qty','ELGI IVOICE NO.']] if not f_match_i.empty else pd.DataFrame(), use_container_width=True)
             
             st.subheader("🕒 Service History")
-            hi_m = service_df[service_df['Fabrication Number'].astype(str) == sel_f_i].sort_values(by='Call Logged Date', ascending=False)
-            for _, si in hi_m.iterrows():
+            hi_match = service_df[service_df['Fabrication Number'].astype(str) == sel_f_i].sort_values(by='Call Logged Date', ascending=False)
+            for _, si in hi_match.iterrows():
                 with st.expander(f"📅 {format_dt(si.get('Call Logged Date'))} | ⚙️ {si.get('Call HMR')} HMR | 🛠️ {si.get('Call Type')}"):
                     st.info(si.get('Service Engineer Comments'))
 
-# --- FOC LIST & PENDING TABS REMAIN SAME AS PREVIOUS ---
+# --- COMMON FUNCTIONS (FOC & PENDING) FOR BOTH ---
+# (Pichle logic mein restored hain, tab change par automatic filter honge)
