@@ -121,11 +121,11 @@ if main_choice == "DPSAC Tracker (Standard)":
                     st.info(s_row.get('Service Engineer Comments', 'N/A'))
 
 # --- 2. INDUSTRIAL SECTION ---
-elif main_choice == "INDUSTRIAL Tracker (Industrial)":
+elif main_choice == "INDUSTRIAL Tracker":
     sub = st.sidebar.selectbox("Industrial Options:", ["Machine Tracker", "FOC List", "Service Pending"])
     
     if sub == "Machine Tracker":
-        st.title("🛡️ INDUSTRIAL Machine Tracker")
+        st.title("🛡️ INDUSTRIAL Tracker")
         c_list_i = sorted(master_od_df['Customer Name'].unique().astype(str))
         sel_c_i = st.sidebar.selectbox("Customer Name", ["All"] + c_list_i, key="i_c")
         df_f_i = master_od_df if sel_c_i == "All" else master_od_df[master_od_df['Customer Name'] == sel_c_i]
