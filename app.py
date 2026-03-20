@@ -4,9 +4,8 @@ import os
 from datetime import datetime
 from io import BytesIO
 
-# Page Settings
-st.set_config_title = "ELGi Global Tracker"
-st.set_page_config(layout="wide")
+# --- PAGE CONFIG ---
+st.set_page_config(page_title="ELGi Global Tracker Pro", layout="wide")
 
 # --- SMART DATA LOADER ---
 @st.cache_data
@@ -38,6 +37,12 @@ def format_dt(dt):
     try: return pd.to_datetime(dt).strftime('%d-%b-%y')
     except: return str(dt)
 
+def to_excel(df):
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False)
+    return output.getvalue()
+
 master_df, master_od_df, service_df, foc_df = load_data()
 
 # --- MAPPINGS ---
@@ -65,40 +70,37 @@ ind_parts = {
     'CF': {'rem': 'CF DUE', 'date': 'MDA CF R DATE', 'due': 'CF DUE DATE'}
 }
 
-# --- SIDEBAR MENU ---
+# --- SIDEBAR ---
 st.sidebar.title("🏢 ELGi Global Menu")
-page_choice = st.sidebar.radio("Go To Page:", ["1. DPSAC Tracker", "2. EPSAC Tracker"])
+page_choice = st.sidebar.radio("Go To Dashboard:", ["1. DPSAC Tracker (Standard)", "2. INDUSTRIAL Tracker (Industrial)"])
 
-# ==========================================
-# PAGE 1: DPSAC TRACKER
-# ==========================================
+# --- 1. DPSAC TRACKER SECTION ---
 if page_choice == "1. DPSAC Tracker":
-    st.title("🛠️ DPSAC Tracker - Units Data")
+    st.title("🛠️ DPSAC Tracker")
     tabs = st.tabs(["Machine Tracker", "FOC List", "Service Pending"])
     
-    with tabs[0]: # Machine Tracker
-        c_list = sorted(master_df['CUSTOMER NAME'].unique().astype(str)) if not master_df.empty else []
-        col1, col2 = st.columns(2)
-        sel_c = col1.selectbox("Select Customer Name", ["All"] + c_list, key="dpsac_c")
+    with tabs[0]:
+        c1_top, c2_top = st.columns(2)
+        sel_c = c1_top.selectbox("Select Customer Name", ["All"] + sorted(master_df['CUSTOMER NAME'].unique().astype(str)), key="d_c")
         df_f = master_df if sel_c == "All" else master_df[master_df['CUSTOMER NAME'] == sel_c]
-        sel_f = col2.selectbox("Select Fabrication No", ["Select"] + sorted(df_f['Fabrication No'].astype(str).unique()), key="dpsac_f")
+        sel_f = c2_top.selectbox("Select Fabrication No", ["Select"] + sorted(df_f['Fabrication No'].astype(str).unique()), key="d_f")
         
         if sel_f != "Select":
             row = df_f[df_f['Fabrication No'].astype(str) == sel_f].iloc[0]
             curr_h = pd.to_numeric(row.get('HMR Cal.', 0), errors='coerce')
             last_h = pd.to_numeric(row.get('Last Call HMR', 0), errors='coerce')
             elapsed = (curr_h - last_h) if curr_h > last_h else 0
-            
-            # Info Cards
+
+            # CLEAN 4-COLUMN LAYOUT
             c1, c2, c3, c4 = st.columns(4)
             with c1:
-                    st.info("📋 Info")
-                    st.write(f"**Customer:** {row.get('CUSTOMER NAME')}")
-                    st.write(f"**Model:** {row.get('MODEL')}"); st.write(f"**Location:** {row.get('LOCATION')}")
-                    st.write(f"**Last Call HMR:** {row.get('Last Call HMR')}")
-                    st.write(f"**Last Call Date:** {format_dt(row.get('Last Call HMR Date'))}")
-                    st.write(f"**Avg. Run Hrs:** {row.get('Avg. Hrs')} 🕧")
-                    st.write(f"**Running Hrs:** {row.get('HMR Cal.')} 🏃‍➡️")
+                st.info("📋 Customer Info")
+                st.write(f"**Customer:** {row.get('CUSTOMER NAME')}")
+                st.write(f"**Model:** {row.get('MODEL', 'N/A')}")
+                st.write(f"**Location:** {row.get('LOCATION', 'None')}")
+                st.write(f"**Last Call HMR:** {last_h}")
+                st.write(f"**Last Call Date:** {format_dt(row.get('Last Call HMR Date'))}")
+                st.write(f"**Running Hrs:** {curr_h} 🏃‍➡️")
             with c2:
                 st.info("📅 Replacement Date")
                 for p, m in std_parts.items(): st.write(f"**{p}:** {format_dt(row.get(m['date']))}")
@@ -111,58 +113,44 @@ if page_choice == "1. DPSAC Tracker":
                 st.error("🚨 Due Date")
                 for p, m in std_parts.items(): st.write(f"**{p}:** {format_dt(row.get(m['due']))}")
 
-            # --- History & FOC Details ---
+            # History with Call HMR Fix
             st.divider()
-            col_f, col_h = st.columns(2)
-            with col_f:
-                st.subheader("🎁 FOC Details")
-                f_match = foc_df[foc_df['FABRICATION NO'].astype(str) == sel_f]
-                st.dataframe(f_match[['Created On', 'FOC Status', 'Part Code', 'Qty', 'ELGI IVOICE NO.']] if not f_match.empty else pd.DataFrame(), use_container_width=True)
-            with col_h:
-                st.subheader("🕒 Service History")
-                h_match = service_df[service_df['Fabrication Number'].astype(str) == sel_f].sort_values(by='Call Logged Date', ascending=False)
-                for _, s_row in h_match.iterrows():
-                    with st.expander(f"📅 {format_dt(s_row.get('Call Logged Date'))} | 🎰 {row.get('Call HMR')} | 🗄️ {s_row.get('Call Type', 'N/A')}"):
-                        st.write(f"**Engineer:** {s_row.get('Service Engineer', 'N/A')}")
-                        st.info(s_row.get('Service Engineer Comments', 'N/A'))
+            st.subheader("🕒 Service History")
+            h_m = service_df[service_df['Fabrication Number'].astype(str) == sel_f].sort_values(by='Call Logged Date', ascending=False)
+            for _, s_row in h_m.iterrows():
+                with st.expander(f"📅 {format_dt(s_row.get('Call Logged Date'))} | ⚙️ {s_row.get('Call HMR')} HMR | {s_row.get('Call Type', 'N/A')}"):
+                    st.write(f"**Call HMR:** `{s_row.get('Call HMR', 'N/A')}`")
+                    st.write(f"**Engineer:** {s_row.get('Service Engineer', 'N/A')}")
+                    st.info(s_row.get('Service Engineer Comments', 'N/A'))
 
-    with tabs[1]: # FOC List
-        st.subheader("📦 DPSAC Master FOC List")
-        std_fabs = master_df['Fabrication No'].astype(str).unique() if not master_df.empty else []
-        st.dataframe(foc_df[foc_df['FABRICATION NO'].astype(str).isin(std_fabs)], use_container_width=True)
-
-    with tabs[2]: # Service Pending
-        st.subheader("⏳ DPSAC Service Pending")
-        b1, b2, b3 = st.columns(3)
-        if b1.button("🔴 Overdue"): st.dataframe(master_df[master_df['BIS Over Due'] != 0])
-        if b2.button("🟡 Current Month"): st.dataframe(master_df[master_df['BIS Current Month Due'] != 0])
-        if b3.button("🟢 Next Month"): st.dataframe(master_df[master_df['BIS Next Month Due'] != 0])
-
-# ==========================================
-# PAGE 2: INDUSTRIAL TRACKER (Industrial Data)
-# ==========================================
+# --- 2. INDUSTRIAL TRACKER SECTION ---
 elif page_choice == "2. INDUSTRIAL Tracker":
-    st.title("🛡️ INDUSTRIAL Tracker - Industrial Machine Data")
+    st.title("🛡️ INDUSTRIAL Tracker (Industrial)")
     tabs_i = st.tabs(["Machine Tracker", "FOC List", "Service Pending"])
 
-    with tabs_i[0]: # Machine Tracker
-        c_list_i = sorted(master_od_df['Customer Name'].unique().astype(str)) if not master_od_df.empty else []
-        col1_i, col2_i = st.columns(2)
-        sel_c_i = col1_i.selectbox("Select Customer Name", ["All"] + c_list_i, key="ind_c")
+    with tabs_i[0]:
+        c1_it, c2_it = st.columns(2)
+        sel_c_i = c1_it.selectbox("Select Customer Name", ["All"] + sorted(master_od_df['Customer Name'].unique().astype(str)), key="i_c")
         df_f_i = master_od_df if sel_c_i == "All" else master_od_df[master_od_df['Customer Name'] == sel_c_i]
-        sel_f_i = col2_i.selectbox("Select Fabrication No", ["Select"] + sorted(df_f_i['Fabrication No'].astype(str).unique()), key="ind_f")
+        sel_f_i = c2_it.selectbox("Select Fabrication No", ["Select"] + sorted(df_f_i['Fabrication No'].astype(str).unique()), key="i_f")
 
         if sel_f_i != "Select":
             row_i = df_f_i[df_f_i['Fabrication No'].astype(str) == sel_f_i].iloc[0]
             hmr_dt = pd.to_datetime(row_i.get('MDA HMR Date'), errors='coerce')
             days = (pd.Timestamp(datetime.now().date()) - hmr_dt).days if pd.notna(hmr_dt) else 0
-            elapsed_i = days * pd.to_numeric(row_i.get('MDA AVG Running Hours Per Day', 0), errors='coerce')
+            avg_r = pd.to_numeric(row_i.get('MDA AVG Running Hours Per Day', 0), errors='coerce')
+            elapsed_i = days * (avg_r if pd.notna(avg_r) else 0)
 
-            # Info Cards
+            # CLEAN 4-COLUMN LAYOUT
             c1, c2, c3, c4 = st.columns(4)
             with c1:
-                st.info("📋 Info")
-                st.write(f"**Customer:** {row_i.get('Customer Name')}\n**Model:** {row_i.get('Model')}\n**Category:** {row_i.get('Category')}")
+                st.info("📋 Customer Info")
+                st.write(f"**Customer:** {row_i.get('Customer Name')}")
+                st.write(f"**Model:** {row_i.get('Model', 'N/A')}")
+                st.write(f"**Location:** {row_i.get('Location', 'None')}")
+                st.write(f"**Last Call Date:** {format_dt(hmr_dt)}")
+                st.write(f"**Avg. Run Hrs:** {avg_r} 🕧")
+                st.write(f"**Running Hrs:** {row_i.get('MDA Total Hours', 'N/A')} 🏃‍➡️")
             with c2:
                 st.info("📅 Replacement Date")
                 for p, m in ind_parts.items(): st.write(f"**{p}:** {format_dt(row_i.get(m['date']))}")
@@ -176,28 +164,12 @@ elif page_choice == "2. INDUSTRIAL Tracker":
                 st.error("🚨 Due Date")
                 for p, m in ind_parts.items(): st.write(f"**{p}:** {format_dt(row_i.get(m['due']))}")
 
-            # --- History & FOC Details ---
+            # History with Call HMR Fix
             st.divider()
-            col_fi, col_hi = st.columns(2)
-            with col_fi:
-                st.subheader("🎁 FOC Details")
-                f_match_i = foc_df[foc_df['FABRICATION NO'].astype(str) == sel_f_i]
-                st.dataframe(f_match_i[['Created On', 'Part Code', 'Qty', 'ELGI IVOICE NO.']] if not f_match_i.empty else pd.DataFrame(), use_container_width=True)
-            with col_hi:
-                st.subheader("🕒 Service History")
-                h_match_i = service_df[service_df['Fabrication Number'].astype(str) == sel_f_i].sort_values(by='Call Logged Date', ascending=False)
-                for _, si_row in h_match_i.iterrows():
-                    with st.expander(f"📅 {format_dt(si_row.get('Call Logged Date'))} | {si_row.get('Call Type', 'N/A')}"):
-                        st.info(si_row.get('Service Engineer Comments', 'N/A'))
-
-    with tabs_i[1]: # FOC List
-        st.subheader("📦 INDUSTRIAL Master FOC List")
-        ind_fabs = master_od_df['Fabrication No'].astype(str).unique() if not master_od_df.empty else []
-        st.dataframe(foc_df[foc_df['FABRICATION NO'].astype(str).isin(ind_fabs)], use_container_width=True)
-
-    with tabs_i[2]: # Service Pending
-        st.subheader("⏳ INDUSTRIAL Service Pending")
-        o1, o2, o3 = st.columns(3)
-        if o1.button("🔴 Red Count"): st.dataframe(master_od_df[master_od_df['Red Count'] != 0])
-        if o2.button("🟡 Yellow Count"): st.dataframe(master_od_df[master_od_df['Yellow Count'] != 0])
-        if o3.button("🟢 Green Count"): st.dataframe(master_od_df[master_od_df['Green Count'] != 0])
+            st.subheader("🕒 Service History")
+            h_m_i = service_df[service_df['Fabrication Number'].astype(str) == sel_f_i].sort_values(by='Call Logged Date', ascending=False)
+            for _, si_row in h_m_i.iterrows():
+                with st.expander(f"📅 {format_dt(si_row.get('Call Logged Date'))} | ⚙️ {si_row.get('Call HMR')} HMR | {si_row.get('Call Type', 'N/A')}"):
+                    st.write(f"**Call HMR:** `{si_row.get('Call HMR', 'N/A')}`")
+                    st.write(f"**Engineer:** {si_row.get('Service Engineer', 'N/A')}")
+                    st.info(si_row.get('Service Engineer Comments', 'N/A'))
