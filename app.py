@@ -92,8 +92,13 @@ if page_choice == "1. DPSAC Tracker":
             # Info Cards
             c1, c2, c3, c4 = st.columns(4)
             with c1:
-                st.info("📋 Info")
-                st.write(f"**Customer:** {row.get('CUSTOMER NAME')}\n**Model:** {row.get('MODEL')}\n**Last Call HMR:** {row.get('Last Call HMR')}\n**Last Call Date:** {row.get('Last Call HMR Date')}\n**Avg. Run Hrs:** {row.get('Avg. Hrs'),}\n**Current HMR:** {curr_h}")
+                    st.info("📋 Info")
+                    st.write(f"**Customer:** {row.get('CUSTOMER NAME')}")
+                    st.write(f"**Model:** {row.get('MODEL')}"); st.write(f"**Location:** {row.get('LOCATION')}")
+                    st.write(f"**Last Call HMR:** {row.get('Last Call HMR')}")
+                    st.write(f"**Last Call Date:** {format_dt(row.get('Last Call HMR Date'))}")
+                    st.write(f"**Avg. Run Hrs:** {row.get('Avg. Hrs')} 🕧")
+                    st.write(f"**Running Hrs:** {row.get('HMR Cal.')} 🏃‍➡️")
             with c2:
                 st.info("📅 Replacement Date")
                 for p, m in std_parts.items(): st.write(f"**{p}:** {format_dt(row.get(m['date']))}")
