@@ -270,7 +270,13 @@ if page_choice == "1. DPSAC Tracker":
     with tabs[1]: # FOC List
         st.subheader("📦 DPSAC Master FOC List")
         std_fabs = master_df['Fabrication No'].astype(str).unique() if not master_df.empty else []
-        f_list_std = foc_df[foc_df['FABRICATION NO'].astype(str).isin(std_fabs)]
+        foc_col = next((c for c in foc_df.columns if "fabrication" in c.lower()), None)
+
+if foc_col:
+    f_list_std = foc_df[foc_df[foc_col].astype(str).isin(std_fabs)]
+else:
+    st.error("❌ Fabrication column not found in FOC file")
+    f_list_std = pd.DataFrame()
         st.download_button("📥 Export FOC List", to_excel(f_list_std), "DPSAC_FOC.xlsx")
         st.dataframe(f_list_std, use_container_width=True)
 
