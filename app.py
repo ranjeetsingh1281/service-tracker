@@ -277,7 +277,7 @@ if foc_col:
 else:
     st.error("❌ Fabrication column not found in FOC file")
     f_list_std = pd.DataFrame()
-        st.download_button("📥 Export FOC List", to_excel(f_list_std), "DPSAC_FOC.xlsx")
+        st.download_button("📥 Export FOC List", to_excel(f_list_std), "Active_FOC.xlsx")
         st.dataframe(f_list_std, use_container_width=True)
 
     with tabs[2]: # Service Pending
