@@ -187,9 +187,78 @@ def dashboard(df, title, industrial=False):
             # ==============================
             # COLUMN 3
             # ==============================
-            with c3:
-                st.markdown("### **Remaining Hours**")
-                st.write("**Remaining logic applied from sheet**")
+           with c3:
+    st.markdown("### **⚙️ Remaining Hours (Live)**")
+
+    if not industrial:
+
+        # 🔍 Detect columns
+        last_hmr_col = next((c for c in df.columns if "last call hmr" in c.lower()), None)
+        avg_col = next((c for c in df.columns if "avg" in c.lower()), None)
+        date_col = next((c for c in df.columns if "last call" in c.lower() and "date" in c.lower()), None)
+
+        # 🧠 Safe extraction
+        last_hmr = row.get(last_hmr_col) if last_hmr_col else 0
+        avg_run = row.get(avg_col) if avg_col else 0
+        last_date = row.get(date_col) if date_col else None
+
+        try:
+            # Convert date
+            last_date = pd.to_datetime(last_date)
+            today = pd.Timestamp.today()
+
+            # Days passed
+            days = (today - last_date).days if pd.notna(last_date) else 0
+
+            # Live HMR
+            live_hmr = (days * avg_run) + last_hmr
+
+            st.write(f"**Live HMR:** {int(live_hmr)}")
+
+        except:
+            st.write("Live calculation error")
+
+        # 🔧 Remaining Parts Logic
+        rem_map = {
+            "Oil": "HMR - Oil remaining",
+            "AFC": "Air filter Compressor Remaining Hours",
+            "AFE": "Air filter Engine Remaining Hours",
+            "MOF": "Main Oil filter Remaining Hours",
+            "ROF": "Return Oil filter Remaining Hours",
+            "AOS": "Separator Remaining Hours",
+            "RGT": "Motor Greasing Remaining Hours",
+            "1500K": "1500 Kit Remaining Hours",
+            "3000K": "3000 Kit Remaining Hours"
+        }
+
+        for k, v in rem_map.items():
+            col = next((c for c in df.columns if v.lower() in c.lower()), None)
+            val = row.get(col) if col else None
+
+            if pd.notna(val):
+                remaining = int(val - live_hmr)
+                if remaining > 0:
+                    st.write(f"**{k}:** {remaining} Hrs")
+                else:
+                    st.write(f"**{k}:** 🔴 {remaining}")
+            else:
+                st.write(f"**{k}:** N/A")
+
+    else:
+        # INDUSTRIAL (already calculated)
+        rem_cols = [
+            "AF Rem. HMR Till date",
+            "OF Rem. HMR Till date",
+            "OIL Rem. HMR Till date",
+            "AOS Rem. HMR Till date",
+            "VK Rem. HMR Till date",
+            "RGT Rem. HMR Till date"
+        ]
+
+        for col_name in rem_cols:
+            col = next((c for c in df.columns if col_name.lower() in c.lower()), None)
+            val = row.get(col) if col else None
+            st.write(f"**{col_name}:** {val if pd.notna(val) else 'N/A'}")
 
             # ==============================
             # COLUMN 4 (FIXED)
