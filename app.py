@@ -1,234 +1,191 @@
 import streamlit as st
 import pandas as pd
 import os
+import smtplib
+import pywhatkit as kit
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from datetime import datetime
+from io import BytesIO
 
 # ==============================
-# 🔐 LOGIN
+# 🔐 ROLE-BASED LOGIN SYSTEM
 # ==============================
-USER_CREDENTIALS = {"admin": "1234"}
+USER_DB = {
+    "admin": {"pass": "admin123", "role": "all"},
+    "user1": {"pass": "dpsac123", "role": "dpsac"},
+    "user2": {"pass": "ind123", "role": "industrial"}
+}
 
 def login():
-    st.title("🔐 ELGi Login")
+    st.title("🔐 ELGi Global Login")
     u = st.text_input("Username")
     p = st.text_input("Password", type="password")
     if st.button("Login"):
-        if u in USER_CREDENTIALS and USER_CREDENTIALS[u] == p:
+        if u in USER_DB and USER_DB[u]["pass"] == p:
             st.session_state["login"] = True
+            st.session_state["user"] = u
+            st.session_state["role"] = USER_DB[u]["role"]
             st.rerun()
         else:
             st.error("Invalid Credentials")
 
-if "login" not in st.session_state:
-    st.session_state["login"] = False
-
-if not st.session_state["login"]:
+if "login" not in st.session_state or not st.session_state["login"]:
     login()
     st.stop()
 
 # ==============================
-# ⚙️ CONFIG
+# 📧 AUTOMATION (Email & WhatsApp)
 # ==============================
-st.set_page_config(layout="wide")
+def send_email_alert(subject, body):
+    sender = "crm@primepower.in" 
+    receiver = "crm@primepower.in"
+    password = "YOUR_GMAIL_APP_PASSWORD" # Boss, yahan App Password daalein
+    
+    msg = MIMEMultipart()
+    msg['From'], msg['To'], msg['Subject'] = sender, receiver, subject
+    msg.attach(MIMEText(body, 'plain'))
+    try:
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(sender, password)
+        server.send_message(msg)
+        server.quit()
+        return True
+    except: return False
+
+def send_whatsapp_alert(message):
+    try:
+        # Isse WhatsApp Web ke zariye message chala jayega
+        kit.sendwhatmsg_instantly("+917061158953", message, wait_time=15, tab_close=True)
+        return True
+    except: return False
 
 # ==============================
 # 🧠 HELPERS
 # ==============================
 def fmt(dt):
-    try:
-        return pd.to_datetime(dt).strftime('%d-%b-%y')
-    except:
-        return "N/A"
+    if pd.isna(dt) or dt == 0: return "N/A"
+    try: return pd.to_datetime(dt).strftime('%d-%b-%y')
+    except: return str(dt)
 
 def find_col(df, keywords):
+    if df.empty: return None
     for c in df.columns:
-        if all(k.lower() in c.lower() for k in keywords):
-            return c
+        if all(k.lower() in str(c).lower() for k in keywords): return c
     return None
 
+def to_excel(df):
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False)
+    return output.getvalue()
+
 # ==============================
-# 📂 LOAD DATA
+# 📂 DATA LOADING
 # ==============================
 @st.cache_data
-def load_file(name):
+def load():
     files = os.listdir('.')
-    f = next((x for x in files if name.lower() in x.lower()), None)
-    if f:
-        df = pd.read_excel(f)
-        df.columns = df.columns.str.strip()
-        return df
-    return pd.DataFrame()
+    def f(name): return next((x for x in files if name.lower() in x.lower() and x.endswith('.xlsx')), None)
+    m_df = pd.read_excel(f("Master_Data")) if f("Master_Data") else pd.DataFrame()
+    m_od_df = pd.read_excel(f("Master_OD_Data")) if f("Master_OD_Data") else pd.DataFrame()
+    foc_df = pd.read_excel(f("Active_FOC")) if f("Active_FOC") else pd.DataFrame()
+    srv_df = pd.read_excel(f("Service_Details")) if f("Service_Details") else pd.DataFrame()
+    for d in [m_df, m_od_df, foc_df, srv_df]:
+        if not d.empty: d.columns = d.columns.str.strip()
+    return m_df, m_od_df, foc_df, srv_df
 
-master_df = load_file("Master_Data")
-master_od_df = load_file("Master_OD_Data")
-foc_df = load_file("FOC")
-service_df = load_file("Service")
-
-# ==============================
-# 🧭 SIDEBAR
-# ==============================
-st.sidebar.title("🏢 ELGi Menu")
-
-tracker = st.sidebar.radio(
-    "Select Tracker",
-    ["DPSAC Tracker", "INDUSTRIAL Tracker"]
-)
-
-# SWITCH DATA
-df = master_df if tracker == "DPSAC Tracker" else master_od_df
+master_df, master_od_df, foc_df, service_df = load()
 
 # ==============================
-# COLUMN DETECTION
+# 🏢 NAVIGATION (RBAC)
 # ==============================
-cust_col = find_col(df, ["customer"])
-fab_col = find_col(df, ["fabrication"])
-status_col = find_col(df, ["unit", "status"])
-cat_col = find_col(df, ["category"])
+role = st.session_state["role"]
+st.sidebar.title(f"👋 {st.session_state['user'].upper()}")
 
-# ==============================
-# 📊 SIDEBAR METRICS
-# ==============================
-if status_col:
-    total = len(df)
-    active = df[df[status_col].astype(str).str.contains("Active", case=False, na=False)].shape[0]
-    shifted = df[df[status_col].astype(str).str.contains("Shifted", case=False, na=False)].shape[0]
-    sold = df[df[status_col].astype(str).str.contains("Sold", case=False, na=False)].shape[0]
+if role == "all":
+    nav = st.sidebar.radio("Navigation:", ["DPSAC Tracker", "INDUSTRIAL Tracker", "📢 Automation Center"])
+elif role == "dpsac": nav = "DPSAC Tracker"
+else: nav = "INDUSTRIAL Tracker"
 
-    st.sidebar.markdown("### 📊 Unit Summary")
-    st.sidebar.write(f"Total: {total}")
-    st.sidebar.write(f"Active: {active}")
-    st.sidebar.write(f"Shifted: {shifted}")
-    st.sidebar.write(f"Sold: {sold}")
-
-# CATEGORY
-if cat_col:
-    st.sidebar.markdown("### 📦 Category Count")
-    for k, v in df[cat_col].value_counts().items():
-        st.sidebar.write(f"{k}: {v}")
-
-# ==============================
-# MAIN TITLE
-# ==============================
-st.title(f"🛠️ {tracker}")
-
-# ==============================
-# 📊 CHARTS
-# ==============================
-st.subheader("📊 Dashboard Analytics")
-
-colA, colB = st.columns(2)
-
-if status_col:
-    colA.plotly_chart({
-        "data": [{
-            "labels": ["Active", "Shifted", "Sold"],
-            "values": [active, shifted, sold],
-            "type": "pie"
-        }]
-    }, use_container_width=True)
-
-if cat_col:
-    cat_df = df[cat_col].value_counts().reset_index()
-    cat_df.columns = ["Category", "Count"]
-
-    colB.plotly_chart({
-        "data": [{
-            "x": cat_df["Category"],
-            "y": cat_df["Count"],
-            "type": "bar"
-        }]
-    }, use_container_width=True)
-
-# ==============================
-# FILTER
-# ==============================
-col1, col2 = st.columns(2)
-
-customers = ["All"] + sorted(df[cust_col].astype(str).unique()) if cust_col else ["All"]
-sel_c = col1.selectbox("Customer", customers)
-
-df_f = df if sel_c == "All" else df[df[cust_col] == sel_c]
-
-fabs = ["Select"] + sorted(df_f[fab_col].astype(str).unique()) if fab_col else ["Select"]
-sel_f = col2.selectbox("Fabrication No", fabs)
-
-# ==============================
-# DETAILS
-# ==============================
-if sel_f != "Select":
-
-    row = df_f[df_f[fab_col].astype(str) == sel_f].iloc[0]
-
-    c1, c2, c3, c4 = st.columns(4)
-
-    # COLUMN 1
-    with c1:
-        st.markdown("### **📋 Customer Info**")
-        st.write(f"**Customer:** {row.get(cust_col)}")
-        st.write(f"**Model:** {row.get(find_col(df,['model']))}")
-        st.write(f"**Location:** {row.get(find_col(df,['location']))}")
-        st.write(f"**Running Hrs:** {row.get(find_col(df,['hmr']))}")
-
-    # COLUMN 2 (REPLACEMENT)
-    with c2:
-        st.markdown("### **🔧 Replacement Dates**")
-        for p in ["oil","afc","afe","mof","rof","aos","greasing","1500","3000"]:
-            col = next((c for c in df.columns if p in c.lower() and "date" in c.lower()), None)
-            st.write(f"**{p.upper()}:** {fmt(row.get(col)) if col else 'N/A'}")
-
-    # COLUMN 3 (REMAINING)
-    with c3:
-        st.markdown("### **⚙️ Remaining Hours (Live)**")
-
-        try:
-            last_hmr = float(row.get(find_col(df,["last","hmr"])) or 0)
-            avg = float(row.get(find_col(df,["avg"])) or 0)
-            last_date = pd.to_datetime(row.get(find_col(df,["last","date"])))
-
-            days = (pd.Timestamp.today() - last_date).days
-            live_hmr = int(last_hmr + (days * avg))
-
-            st.write(f"**Live HMR:** {live_hmr}")
-        except:
-            live_hmr = 0
-            st.write("Live HMR: N/A")
-
-        for p in ["oil","afc","afe","mof","rof","aos","1500","3000"]:
-            col = next((c for c in df.columns if p in c.lower() and "remaining" in c.lower()), None)
-
-            if col and pd.notna(row[col]):
-                rem = int(float(row[col]) - live_hmr)
-
-                if rem > 0:
-                    st.write(f"**{p.upper()}:** 🟢 {rem}")
-                elif rem > -50:
-                    st.write(f"**{p.upper()}:** 🟡 {rem}")
-                else:
-                    st.write(f"**{p.upper()}:** 🔴 {rem}")
-            else:
-                st.write(f"**{p.upper()}:** N/A")
-
-    # COLUMN 4 (DUE)
-    with c4:
-        st.markdown("### **🚨 Due Dates**")
-        for col in df.columns:
-            if "due" in col.lower():
-                st.write(f"**{col}:** {fmt(row.get(col))}")
-
-    # FOC
-    st.subheader("🎁 FOC Details")
-    foc_col = find_col(foc_df, ["fabrication"])
-    if foc_col:
-        st.dataframe(foc_df[foc_df[foc_col].astype(str) == sel_f])
-
-    # SERVICE
-    st.subheader("🕒 Service History")
-    serv_col = find_col(service_df, ["fabrication"])
-    if serv_col:
-        st.dataframe(service_df[service_df[serv_col].astype(str) == sel_f])
-
-# ==============================
-# LOGOUT
-# ==============================
 if st.sidebar.button("Logout"):
     st.session_state["login"] = False
     st.rerun()
+
+# ==============================
+# 💎 TRACKER CORE ENGINE
+# ==============================
+def run_tracker(df, name, key_suffix):
+    st.title(f"🛠️ {name} Tracker Pro")
+    
+    status_col = find_col(df, ["unit", "status"])
+    cust_col = find_col(df, ["customer"])
+    fab_col = find_col(df, ["fabrication"])
+
+    # 🚨 OVERDUE ALERTS SECTION
+    overdue_col = find_col(df, ["over", "due"]) or find_col(df, ["red", "count"])
+    if overdue_col:
+        critical = df[df[overdue_col] != 0]
+        if not critical.empty:
+            st.error(f"⚠️ {len(critical)} Machines are OVERDUE!")
+            c1, c2 = st.columns(2)
+            if c1.button(f"📧 Send Email Alert ({key_suffix})"):
+                msg = f"ELGi Alert: {len(critical)} machines are overdue in {name} Tracker."
+                if send_email_alert(f"CRITICAL: {name} Alert", msg): st.success("Email Sent!")
+            if c2.button(f"📱 Send WhatsApp Alert ({key_suffix})"):
+                send_whatsapp_alert(f"ELGi Global: {len(critical)} machines are RED in {name}.")
+
+    # 🔍 MACHINE SEARCH & LIVE HMR
+    st.divider()
+    col1, col2 = st.columns(2)
+    sel_c = col1.selectbox("Select Customer", ["All"] + sorted(df[cust_col].astype(str).unique()), key=f"c_{key_suffix}")
+    df_f = df if sel_c == "All" else df[df[cust_col] == sel_c]
+    sel_f = col2.selectbox("Select Fabrication", ["Select"] + sorted(df_f[fab_col].astype(str).unique()), key=f"f_{key_suffix}")
+
+    if sel_f != "Select":
+        row = df_f[df_f[fab_col].astype(str) == sel_f].iloc[0]
+        try:
+            last_h = float(row.get(find_col(df, ["hmr", "cal"]), 0))
+            avg = float(row.get(find_col(df, ["avg", "running"]), 0))
+            l_date = pd.to_datetime(row.get(find_col(df, ["hmr", "date"])))
+            live_hmr = int(last_h + (max(0, (pd.Timestamp.today() - l_date).days) * avg))
+        except: live_hmr = int(row.get(find_col(df, ["hmr", "cal"]), 0))
+
+        st.success(f"Live Report for: {sel_f}")
+        m1, m2, m3, m4 = st.columns(4)
+        with m1:
+            st.info("📋 Info")
+            st.write(f"**Cust:** {row[cust_col]}\n**Live HMR:** `{live_hmr}`")
+            st.download_button("📄 Export", to_excel(pd.DataFrame([row])), f"Report_{sel_f}.xlsx")
+        with m2:
+            st.info("🔧 History")
+            for p in ["oil","afc","afe","mof","rof","aos","rgt","1500","3000"]:
+                col = next((c for c in df.columns if p in c.lower() and "date" in c.lower() and "due" not in c.lower()), None)
+                if col: st.write(f"**{p.upper()}:** {fmt(row.get(col))}")
+        with m3:
+            st.info("⏳ Remaining")
+            for p in ["oil","afc","afe","mof","rof","aos","rgt","1500","3000"]:
+                rem_c = next((c for c in df.columns if p in c.lower() and "remaining" in c.lower()), None)
+                if rem_c and pd.notna(row[rem_c]):
+                    act_rem = int(float(row[rem_c]) - (live_hmr - last_h))
+                    icon = "🟢" if act_rem > 100 else "🟡" if act_rem > 0 else "🔴"
+                    st.write(f"**{p.upper()}:** {icon} {act_rem}")
+        with m4:
+            st.error("🚨 Next Due")
+            for p in ["oil","afc","afe","mof","rof","aos","rgt","1500","3000"]:
+                due_c = next((c for c in df.columns if p in c.lower() and "due" in c.lower() and "date" in c.lower()), None)
+                if due_c: st.write(f"**{p.upper()}:** {fmt(row.get(due_c))}")
+
+# ==============================
+# 📢 EXECUTION
+# ==============================
+if nav == "DPSAC Tracker":
+    run_tracker(master_df, "DPSAC", "DPSAC")
+elif nav == "INDUSTRIAL Tracker":
+    run_tracker(master_od_df, "INDUSTRIAL", "IND")
+elif nav == "📢 Automation Center":
+    st.header("📢 Manual Broadcast")
+    msg = st.text_area("Message:", "Daily Update: All machines are healthy.")
+    if st.button("Send WhatsApp to +917061158953"):
+        send_whatsapp_alert(msg)
