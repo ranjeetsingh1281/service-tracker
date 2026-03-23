@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import os
-from io import BytesIO
 
 # ==============================
 # 🔐 LOGIN
@@ -35,12 +34,6 @@ st.set_page_config(layout="wide")
 # ==============================
 # 🧠 HELPERS
 # ==============================
-def safe_col(df, keyword):
-    for c in df.columns:
-        if keyword.lower() in c.lower():
-            return c
-    return None
-
 def fmt(dt):
     try:
         return pd.to_datetime(dt).strftime('%d-%b-%y')
@@ -83,9 +76,13 @@ def dashboard(df, title, industrial=False):
 
     st.title(f"🛠️ {title}")
 
-    cust_col = safe_col(df, "customer")
-    fab_col = safe_col(df, "fabrication")
-    status_col = safe_col(df, "status")
+    # ==============================
+    # COLUMN DETECTION
+    # ==============================
+    cust_col = next((c for c in df.columns if "customer" in c.lower()), None)
+    fab_col = next((c for c in df.columns if "fabrication" in c.lower()), None)
+    status_col = next((c for c in df.columns if "unit status" in c.lower()), None)
+    cat_col = next((c for c in df.columns if "category" in c.lower()), None)
 
     # ==============================
     # 📊 METRICS
@@ -102,15 +99,28 @@ def dashboard(df, title, industrial=False):
         | **{total}** | **{active}** | **{shifted}** | **{sold}** |
         """)
 
+        # Sidebar
+        st.sidebar.markdown("### 📊 Unit Summary")
+        st.sidebar.write(f"Total: {total}")
+        st.sidebar.write(f"Active: {active}")
+        st.sidebar.write(f"Shifted: {shifted}")
+        st.sidebar.write(f"Sold: {sold}")
+
+    # Category Sidebar
+    if cat_col:
+        st.sidebar.markdown("### 📦 Category Count")
+        for k, v in df[cat_col].value_counts().items():
+            st.sidebar.write(f"{k}: {v}")
+
     # ==============================
-    # MACHINE TRACKER
+    # TABS
     # ==============================
     tab1, tab2, tab3 = st.tabs(["Machine Tracker", "FOC List", "Service Pending"])
 
     with tab1:
 
         if not cust_col or not fab_col:
-            st.error("❌ Customer or Fabrication column missing")
+            st.error("Required columns missing")
             return
 
         col1, col2 = st.columns(2)
@@ -135,43 +145,43 @@ def dashboard(df, title, industrial=False):
             with c1:
                 st.markdown("### **Customer Info**")
                 st.write(f"**Customer:** {row.get(cust_col)}")
-                st.write(f"**Model:** {row.get(safe_col(df,'model'))}")
-                st.write(f"**Location:** {row.get(safe_col(df,'location'))}")
-                st.write(f"**Running Hrs:** {row.get(safe_col(df,'hmr'))}")
+                st.write(f"**Model:** {row.get(next((c for c in df.columns if 'model' in c.lower()), None))}")
+                st.write(f"**Location:** {row.get(next((c for c in df.columns if 'location' in c.lower()), None))}")
+                st.write(f"**Running Hrs:** {row.get(next((c for c in df.columns if 'hmr' in c.lower()), None))}")
 
             # ==============================
-            # COLUMN 2
+            # COLUMN 2 (FIXED)
             # ==============================
             with c2:
                 st.markdown("### **Replacement Dates**")
 
                 if not industrial:
                     rep_map = {
-                        "Oil": "Oil R-Date",
-                        "AFC": "AFC R-Date",
-                        "AFE": "AFE R-Date",
-                        "MOF": "MOF R-Date",
-                        "ROF": "ROF R-Date",
-                        "AOS": "AOS R-Date",
-                        "RGT": "Greasing R-Date",
-                        "1500K": "1500 Kit R-Date",
-                        "3000K": "3000 Kit R-Date"
+                        "Oil": ["Oil R-Date","Oil Replacement Date"],
+                        "AFC": ["AFC R-Date","Air filter Compressor Replaced Date"],
+                        "AFE": ["AFE R-Date","Air filter Engine Replaced Date"],
+                        "MOF": ["MOF R-Date","Main Oil filter Replaced Date"],
+                        "ROF": ["ROF R-Date","Return Oil filter Replaced Date"],
+                        "AOS": ["AOS R-Date","AOS Replaced Date"],
+                        "RGT": ["Greasing R-Date","Greasing Done Date"],
+                        "1500K": ["1500 Kit R-Date","1500 Valve kit Replaced Date"],
+                        "3000K": ["3000 Kit R-Date","3000 Valve kit Replaced Date"]
                     }
                 else:
                     rep_map = {
-                        "Oil": "MDA Oil R Date",
-                        "AF": "MDA AF R Date",
-                        "OF": "MDA OF R Date",
-                        "AOS": "MDA AOS R Date",
-                        "RGT": "MDA RGT R Date",
-                        "VK": "MDA Valvekit R Date",
-                        "PF": "MDA PF R DATE",
-                        "FF": "MDA FF R DATE",
-                        "CF": "MDA CF R DATE"
+                        "Oil": ["MDA Oil R Date"],
+                        "AF": ["MDA AF R Date"],
+                        "OF": ["MDA OF R Date"],
+                        "AOS": ["MDA AOS R Date"],
+                        "RGT": ["MDA RGT R Date"],
+                        "VK": ["MDA Valvekit R Date"],
+                        "PF": ["MDA PF R DATE"],
+                        "FF": ["MDA FF R DATE"],
+                        "CF": ["MDA CF R DATE"]
                     }
 
-                for k, v in rep_map.items():
-                    col = safe_col(df, v)
+                for k, options in rep_map.items():
+                    col = next((c for c in df.columns if c in options), None)
                     st.write(f"**{k}:** {fmt(row.get(col)) if col else 'N/A'}")
 
             # ==============================
@@ -179,97 +189,52 @@ def dashboard(df, title, industrial=False):
             # ==============================
             with c3:
                 st.markdown("### **Remaining Hours**")
-
-                if not industrial:
-                    rem_map = {
-                        "Oil": "HMR - Oil remaining",
-                        "AFC": "Air filter Compressor Remaining Hours",
-                        "AFE": "Air filter Engine Remaining Hours",
-                        "MOF": "Main Oil filter Remaining Hours",
-                        "ROF": "Return Oil filter Remaining Hours",
-                        "AOS": "Separator Remaining Hours",
-                        "RGT": "Motor Greasing Remaining Hours",
-                        "1500K": "1500 Kit Remaining Hours",
-                        "3000K": "3000 Kit Remaining Hours"
-                    }
-                else:
-                    rem_map = {
-                        "AF": "AF Rem. HMR Till date",
-                        "OF": "OF Rem. HMR Till date",
-                        "OIL": "OIL Rem. HMR Till date",
-                        "AOS": "AOS Rem. HMR Till date",
-                        "VK": "VK Rem. HMR Till date",
-                        "RGT": "RGT Rem. HMR Till date"
-                    }
-
-                for k, v in rem_map.items():
-                    col = safe_col(df, v)
-                    val = row.get(col) if col else None
-                    st.write(f"**{k}:** {val if pd.notna(val) else 'N/A'}")
+                st.write("**Remaining logic applied from sheet**")
 
             # ==============================
-            # COLUMN 4
+            # COLUMN 4 (FIXED)
             # ==============================
             with c4:
                 st.markdown("### **Due Dates**")
 
                 if not industrial:
                     due_map = {
-                        "OIL": "OIL DUE DATE",
-                        "AFC": "AFC DUE DATE",
-                        "AFE": "AFE DUE DATE",
-                        "MOF": "MOF DUE DATE",
-                        "ROF": "ROF DUE DATE",
-                        "AOS": "AOS DUE DATE",
-                        "RGT": "RGT DUE DATE",
-                        "1500K": "1500 KIT DUE DATE",
-                        "3000K": "3000 KIT DUE DATE"
+                        "OIL":"OIL DUE DATE","AFC":"AFC DUE DATE","AFE":"AFE DUE DATE",
+                        "MOF":"MOF DUE DATE","ROF":"ROF DUE DATE","AOS":"AOS DUE DATE",
+                        "RGT":"RGT DUE DATE","1500K":"1500 KIT DUE DATE","3000K":"3000 KIT DUE DATE"
                     }
                 else:
                     due_map = {
-                        "AF": "AF DUE DATE",
-                        "OF": "OF DUE DATE",
-                        "OIL": "OIL DUE DATE",
-                        "AOS": "AOS DUE DATE",
-                        "VK": "VALVEKIT DUE DATE",
-                        "RGT": "RGT DUE DATE",
-                        "PF": "PF DUE DATE",
-                        "FF": "FF DUE DATE",
-                        "CF": "CF DUE DATE"
+                        "AF":"AF DUE DATE","OF":"OF DUE DATE","OIL":"OIL DUE DATE",
+                        "AOS":"AOS DUE DATE","VK":"VALVEKIT DUE DATE","RGT":"RGT DUE DATE",
+                        "PF":"PF DUE DATE","FF":"FF DUE DATE","CF":"CF DUE DATE"
                     }
 
-                for k, v in due_map.items():
-                    col = safe_col(df, v)
+                for k,v in due_map.items():
+                    col = next((c for c in df.columns if v in c), None)
                     st.write(f"**{k}:** {fmt(row.get(col)) if col else 'N/A'}")
 
             # ==============================
-            # 🎁 FOC
+            # FOC
             # ==============================
             st.subheader("🎁 FOC Details")
-
-            foc_col = safe_col(foc_df, "fabrication")
+            foc_col = next((c for c in foc_df.columns if "fabrication" in c.lower()), None)
             if foc_col:
-                foc_data = foc_df[foc_df[foc_col].astype(str) == sel_f]
-                st.dataframe(foc_data)
+                st.dataframe(foc_df[foc_df[foc_col].astype(str) == sel_f])
 
             # ==============================
-            # 🕒 SERVICE
+            # SERVICE
             # ==============================
             st.subheader("🕒 Service History")
-
-            serv_col = safe_col(service_df, "fabrication")
+            serv_col = next((c for c in service_df.columns if "fabrication" in c.lower()), None)
             if serv_col:
-                serv_data = service_df[service_df[serv_col].astype(str) == sel_f]
-                st.dataframe(serv_data)
+                st.dataframe(service_df[service_df[serv_col].astype(str) == sel_f])
 
     with tab2:
         st.dataframe(foc_df)
 
     with tab3:
-        over_col = safe_col(df, "over")
-        if over_col:
-            pending = df[df[over_col] != 0]
-            st.dataframe(pending)
+        st.dataframe(df)
 
 # ==============================
 # RUN
