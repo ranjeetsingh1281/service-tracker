@@ -39,9 +39,28 @@ def to_excel(df):
 
 master_df, master_od_df, service_df, foc_df = load_data()
 
-# --- SIDEBAR MENU ---
+# --- SIDEBAR MENU & METRICS ---
 st.sidebar.title("🏢 ELGi Global Menu")
 page_choice = st.sidebar.radio("Go To Dashboard:", ["1. DPSAC Tracker", "2. INDUSTRIAL Tracker"])
+
+# --- RENDER SIDEBAR METRICS BASED ON SELECTION ---
+st.sidebar.markdown("---")
+st.sidebar.subheader("📊 Unit Status (Sidebar)")
+
+if page_choice == "1. DPSAC Tracker" and not master_df.empty:
+    curr_df = master_df
+    s_col = next((c for c in curr_df.columns if 'status' in c.lower()), "Unit Status")
+    st.sidebar.metric("📦 Total Units", len(curr_df))
+    st.sidebar.metric("🟢 Active", len(curr_df[curr_df[s_col].astype(str).str.contains('Active', case=False, na=False)]))
+    st.sidebar.metric("🔵 Shifted", len(curr_df[curr_df[s_col].astype(str).str.contains('Shifted', case=False, na=False)]))
+    st.sidebar.metric("🟠 Sold", len(curr_df[curr_df[s_col].astype(str).str.contains('Sold', case=False, na=False)]))
+elif page_choice == "2. INDUSTRIAL Tracker" and not master_od_df.empty:
+    curr_df = master_od_df
+    s_col = next((c for c in curr_df.columns if 'status' in c.lower()), "Unit Status")
+    st.sidebar.metric("📦 Total Units", len(curr_df))
+    st.sidebar.metric("🟢 Active", len(curr_df[curr_df[s_col].astype(str).str.contains('Active', case=False, na=False)]))
+    st.sidebar.metric("🔵 Shifted", len(curr_df[curr_df[s_col].astype(str).str.contains('Shifted', case=False, na=False)]))
+    st.sidebar.metric("🟠 Sold", len(curr_df[curr_df[s_col].astype(str).str.contains('Sold', case=False, na=False)]))
 
 # ==========================================
 # 1. DPSAC TRACKER (Standard)
@@ -50,15 +69,6 @@ if page_choice == "1. DPSAC Tracker":
     st.title("🛠️ DPSAC Tracker - Standard Machine Data")
     s_col = next((c for c in master_df.columns if 'status' in c.lower()), "Unit Status")
     
-    if not master_df.empty:
-        st.markdown("### 📊 Unit Status Overview")
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("📦 Total Units", len(master_df))
-        m2.metric("🟢 Active", len(master_df[master_df[s_col].astype(str).str.contains('Active', case=False, na=False)]))
-        m3.metric("🔵 Shifted", len(master_df[master_df[s_col].astype(str).str.contains('Shifted', case=False, na=False)]))
-        m4.metric("🟠 Sold", len(master_df[master_df[s_col].astype(str).str.contains('Sold', case=False, na=False)]))
-        st.divider()
-
     st.sidebar.markdown("---")
     status_choice = st.sidebar.selectbox("Filter Status List:", ["None", "Active", "Shifted", "Sold"], key="std_filter")
     if status_choice != "None":
@@ -82,52 +92,43 @@ if page_choice == "1. DPSAC Tracker":
             
             col1, col2, col3, col4 = st.columns(4)
             with col1:
-                st.info("📋 Customer Info")
-                st.write(f"**Customer:** {row.get('CUSTOMER NAME')}\n**Model:** {row.get('MODEL')}\n**Location:** {row.get('LOCATION', 'None')}")
-                st.write(f"**Status:** `{row.get(s_col, 'N/A')}`\n**Running Hrs:** {curr_h} 🏃‍➡️")
+                st.info("📋 Info")
+                st.write(f"**Customer:** {row.get('CUSTOMER NAME')}\n**Model:** {row.get('MODEL')}\n**Status:** `{row.get(s_col, 'N/A')}`\n**Running Hrs:** {curr_h}")
             with col2:
-                st.info("📅 Replacement (9)")
+                st.info("📅 Replacement")
                 p_std = {'Oil':'Oil Replacement Date','AFC':'Air filter Compressor Replaced Date','AFE':'Air filter Engine Replaced Date','MOF':'Main Oil filter Replaced Date','ROF':'Return Oil filter Replaced Date','AOS':'AOS Replaced Date','RGT':'Greasing Done Date','1500K':'1500 Valve kit Replaced Date','3000K':'3000 Valve kit Replaced Date'}
                 for k, v in p_std.items(): st.write(f"**{k}:** {format_dt(row.get(v))}")
             with col3:
-                st.info("⚙️ Live Remaining")
+                st.info("⚙️ Remaining")
                 r_std = {'Oil':'HMR - Oil remaining','AFC':'Air filter replaced - Compressor Remaining Hours','AFE':'Air filter replaced - Engine Remaining Hours','MOF':'Main Oil filter Remaining Hours','ROF':'Return Oil filter Remaining Hours','AOS':'HMR - Separator remaining','RGT':'HMR - Motor regressed remaining','1500K':'1500 Valve kit Remaining Hours','3000K':'3000 Valve kit Remaining Hours'}
                 for k, v in r_std.items():
                     val = pd.to_numeric(row.get(v, 0), errors='coerce')
                     rem = int((val if pd.notna(val) else 0) - elapsed)
                     st.write(f"**{k}:** {rem} Hrs" if rem > 0 else f"**{k}:** 🚨 {rem}")
             with col4:
-                st.error("🚨 Due Date (9)")
+                st.error("🚨 Due Date")
                 d_std = {'OIL':'OIL DUE DATE','AFC':'AFC DUE DATE','AFE':'AFE DUE DATE','MOF':'MOF DUE DATE','ROF':'ROF DUE DATE','AOS':'AOS DUE DATE','RGT':'RGT DUE DATE','1500K':'1500 KIT DUE DATE','3000K':'3000 KIT DUE DATE'}
                 for k, v in d_std.items(): st.write(f"**{k}:** {format_dt(row.get(v))}")
 
             st.divider()
-            f_m = foc_df[foc_df['FABRICATION NO'].astype(str) == sel_f] if 'FABRICATION NO' in foc_df.columns else pd.DataFrame()
+            f_col = next((c for c in foc_df.columns if 'FABRICATION' in str(c).upper()), "FABRICATION NO")
+            f_m = foc_df[foc_df[f_col].astype(str) == sel_f] if not foc_df.empty else pd.DataFrame()
             st.subheader("🎁 Machine FOC Details")
             st.dataframe(f_m[['Created On','Part Code','Qty','ELGI IVOICE NO.']] if not f_m.empty else pd.DataFrame(), use_container_width=True)
             
             st.subheader("🕒 Service History")
             h_m = service_df[service_df['Fabrication Number'].astype(str) == sel_f].sort_values(by='Call Logged Date', ascending=False)
             for _, s in h_m.iterrows():
-                with st.expander(f"📅 {format_dt(s.get('Call Logged Date'))} | ⚙️ {s.get('Call HMR')} HMR | {s.get('Call Type')}"):
+                with st.expander(f"📅 {format_dt(s.get('Call Logged Date'))} | ⚙️ {s.get('Call HMR')} HMR"):
                     st.write(f"**Engineer:** {s.get('Service Engineer')}\n**Comments:** {s.get('Service Engineer Comments')}")
 
 # ==========================================
 # 2. INDUSTRIAL TRACKER (Industrial)
 # ==========================================
 elif page_choice == "2. INDUSTRIAL Tracker":
-    st.title("🛡️ INDUSTRIAL Tracker - OD Master Data")
+    st.title("🛡️ INDUSTRIAL Tracker - Industrial Data")
     s_col_i = next((c for c in master_od_df.columns if 'status' in c.lower()), "Unit Status")
     
-    if not master_od_df.empty:
-        st.markdown("### 📊 Unit Status Overview")
-        i1, i2, i3, i4 = st.columns(4)
-        i1.metric("📦 Total Units", len(master_od_df))
-        i2.metric("🟢 Active", len(master_od_df[master_od_df[s_col_i].astype(str).str.contains('Active', case=False, na=False)]))
-        i3.metric("🔵 Shifted", len(master_od_df[master_od_df[s_col_i].astype(str).str.contains('Shifted', case=False, na=False)]))
-        i4.metric("🟠 Sold", len(master_od_df[master_od_df[s_col_i].astype(str).str.contains('Sold', case=False, na=False)]))
-        st.divider()
-
     st.sidebar.markdown("---")
     status_choice_i = st.sidebar.selectbox("Filter Status List:", ["None", "Active", "Shifted", "Sold"], key="ind_filter")
     if status_choice_i != "None":
@@ -153,26 +154,26 @@ elif page_choice == "2. INDUSTRIAL Tracker":
             col_i1, col_i2, col_i3, col_i4 = st.columns(4)
             with col_i1:
                 st.info("📋 Info")
-                st.write(f"**Customer:** {row_i.get('Customer Name')}\n**Model:** {row_i.get('Model')}\n**Status:** `{row_i.get(s_col_i, 'N/A')}`")
-                st.write(f"**Running Hrs:** {row_i.get('MDA Total Hours', 'N/A')} 🏃‍➡️")
+                st.write(f"**Customer:** {row_i.get('Customer Name')}\n**Model:** {row_i.get('Model')}\n**Status:** `{row_i.get(s_col_i, 'N/A')}`\n**Running Hrs:** {row_i.get('MDA Total Hours', 'N/A')}")
             with col_i2:
-                st.info("📅 Replacement (9)")
+                st.info("📅 Replacement")
                 p_ind = {'Oil':'MDA Oil R Date','AF':'MDA AF R Date','OF':'MDA OF R Date','AOS':'MDA AOS R Date','RGT':'MDA RGT R Date','VK':'MDA Valvekit R Date','PF':'MDA PF R DATE','FF':'MDA FF R DATE','CF':'MDA CF R DATE'}
                 for k, v in p_ind.items(): st.write(f"**{k}:** {format_dt(row_i.get(v))}")
             with col_i3:
-                st.info("⚙️ Live Remaining")
+                st.info("⚙️ Remaining")
                 r_ind = {'Oil':'MDA OIL Remaining Hours','AF':'AF Remaining Hours','OF':'OF Remaining Hours','AOS':'AOS Remaining Hours','RGT':'RGT Remaining Hours','VK':'Valve Kit Remaining Hours','PF':'PF DUE','FF':'FF DUE','CF':'CF DUE'}
                 for k, v in r_ind.items():
                     val = pd.to_numeric(row_i.get(v, 0), errors='coerce')
                     rem = int((val if pd.notna(val) else 0) - elapsed_i)
                     st.write(f"**{k}:** {rem} Hrs" if rem > 0 else f"**{k}:** 🚨 {rem}")
             with col_i4:
-                st.error("🚨 Due Date (9)")
+                st.error("🚨 Due Date")
                 d_ind = {'Oil':'OIL DUE DATE','AF':'AF DUE DATE','OF':'OF DUE DATE','AOS':'AOS DUE DATE','VK':'VALVEKIT DUE DATE','RGT':'RGT DUE DATE','PF':'PF DUE DATE','FF':'FF DUE DATE','CF':'CF DUE DATE'}
                 for k, v in d_ind.items(): st.write(f"**{k}:** {format_dt(row_i.get(v))}")
 
             st.divider()
-            fi_m = foc_df[foc_df['FABRICATION NO'].astype(str) == sel_fi] if 'FABRICATION NO' in foc_df.columns else pd.DataFrame()
+            f_col_i = next((c for c in foc_df.columns if 'FABRICATION' in str(c).upper()), "FABRICATION NO")
+            fi_m = foc_df[foc_df[f_col_i].astype(str) == sel_fi] if not foc_df.empty else pd.DataFrame()
             st.subheader("🎁 Machine FOC Details")
             st.dataframe(fi_m[['Created On','Part Code','Qty','ELGI IVOICE NO.']] if not fi_m.empty else pd.DataFrame(), use_container_width=True)
             
