@@ -49,23 +49,32 @@ def find_col(df, keywords):
 # 📂 LOAD DATA
 # ==============================
 @st.cache_data
-def load():
+def load_file(name):
     files = os.listdir('.')
+    f = next((x for x in files if name.lower() in x.lower()), None)
+    if f:
+        df = pd.read_excel(f)
+        df.columns = df.columns.str.strip()
+        return df
+    return pd.DataFrame()
 
-    def f(name):
-        return next((x for x in files if name.lower() in x.lower()), None)
+master_df = load_file("Master_Data")
+master_od_df = load_file("Master_OD_Data")
+foc_df = load_file("FOC")
+service_df = load_file("Service")
 
-    df = pd.read_excel(f("Master_Data")) if f("Master_Data") else pd.DataFrame()
-    foc = pd.read_excel(f("FOC")) if f("FOC") else pd.DataFrame()
-    srv = pd.read_excel(f("Service")) if f("Service") else pd.DataFrame()
+# ==============================
+# 🧭 SIDEBAR
+# ==============================
+st.sidebar.title("🏢 ELGi Menu")
 
-    for d in [df, foc, srv]:
-        if not d.empty:
-            d.columns = d.columns.str.strip()
+tracker = st.sidebar.radio(
+    "Select Tracker",
+    ["DPSAC Tracker", "INDUSTRIAL Tracker"]
+)
 
-    return df, foc, srv
-
-df, foc_df, service_df = load()
+# SWITCH DATA
+df = master_df if tracker == "DPSAC Tracker" else master_od_df
 
 # ==============================
 # COLUMN DETECTION
@@ -76,15 +85,13 @@ status_col = find_col(df, ["unit", "status"])
 cat_col = find_col(df, ["category"])
 
 # ==============================
-# SIDEBAR
+# 📊 SIDEBAR METRICS
 # ==============================
-st.sidebar.title("🏢 ELGi Menu")
-
 if status_col:
     total = len(df)
-    active = df[df[status_col].str.contains("Active", case=False, na=False)].shape[0]
-    shifted = df[df[status_col].str.contains("Shifted", case=False, na=False)].shape[0]
-    sold = df[df[status_col].str.contains("Sold", case=False, na=False)].shape[0]
+    active = df[df[status_col].astype(str).str.contains("Active", case=False, na=False)].shape[0]
+    shifted = df[df[status_col].astype(str).str.contains("Shifted", case=False, na=False)].shape[0]
+    sold = df[df[status_col].astype(str).str.contains("Sold", case=False, na=False)].shape[0]
 
     st.sidebar.markdown("### 📊 Unit Summary")
     st.sidebar.write(f"Total: {total}")
@@ -92,6 +99,7 @@ if status_col:
     st.sidebar.write(f"Shifted: {shifted}")
     st.sidebar.write(f"Sold: {sold}")
 
+# CATEGORY
 if cat_col:
     st.sidebar.markdown("### 📦 Category Count")
     for k, v in df[cat_col].value_counts().items():
@@ -100,7 +108,7 @@ if cat_col:
 # ==============================
 # MAIN TITLE
 # ==============================
-st.title("🛠️ DPSAC Tracker")
+st.title(f"🛠️ {tracker}")
 
 # ==============================
 # 📊 CHARTS
@@ -110,15 +118,10 @@ st.subheader("📊 Dashboard Analytics")
 colA, colB = st.columns(2)
 
 if status_col:
-    pie_df = pd.DataFrame({
-        "Status": ["Active", "Shifted", "Sold"],
-        "Count": [active, shifted, sold]
-    })
-
     colA.plotly_chart({
         "data": [{
-            "labels": pie_df["Status"],
-            "values": pie_df["Count"],
+            "labels": ["Active", "Shifted", "Sold"],
+            "values": [active, shifted, sold],
             "type": "pie"
         }]
     }, use_container_width=True)
@@ -140,12 +143,12 @@ if cat_col:
 # ==============================
 col1, col2 = st.columns(2)
 
-customers = ["All"] + sorted(df[cust_col].astype(str).unique())
+customers = ["All"] + sorted(df[cust_col].astype(str).unique()) if cust_col else ["All"]
 sel_c = col1.selectbox("Customer", customers)
 
 df_f = df if sel_c == "All" else df[df[cust_col] == sel_c]
 
-fabs = ["Select"] + sorted(df_f[fab_col].astype(str).unique())
+fabs = ["Select"] + sorted(df_f[fab_col].astype(str).unique()) if fab_col else ["Select"]
 sel_f = col2.selectbox("Fabrication No", fabs)
 
 # ==============================
@@ -160,22 +163,19 @@ if sel_f != "Select":
     # COLUMN 1
     with c1:
         st.markdown("### **📋 Customer Info**")
-        st.write(f"**Customer:** {row[cust_col]}")
+        st.write(f"**Customer:** {row.get(cust_col)}")
         st.write(f"**Model:** {row.get(find_col(df,['model']))}")
         st.write(f"**Location:** {row.get(find_col(df,['location']))}")
         st.write(f"**Running Hrs:** {row.get(find_col(df,['hmr']))}")
 
-    # COLUMN 2 (FIXED)
+    # COLUMN 2 (REPLACEMENT)
     with c2:
         st.markdown("### **🔧 Replacement Dates**")
-
-        parts = ["oil","afc","afe","mof","rof","aos","greasing","1500","3000"]
-
-        for p in parts:
+        for p in ["oil","afc","afe","mof","rof","aos","greasing","1500","3000"]:
             col = next((c for c in df.columns if p in c.lower() and "date" in c.lower()), None)
             st.write(f"**{p.upper()}:** {fmt(row.get(col)) if col else 'N/A'}")
 
-    # COLUMN 3 (LIVE)
+    # COLUMN 3 (REMAINING)
     with c3:
         st.markdown("### **⚙️ Remaining Hours (Live)**")
 
@@ -207,10 +207,9 @@ if sel_f != "Select":
             else:
                 st.write(f"**{p.upper()}:** N/A")
 
-    # COLUMN 4
+    # COLUMN 4 (DUE)
     with c4:
         st.markdown("### **🚨 Due Dates**")
-
         for col in df.columns:
             if "due" in col.lower():
                 st.write(f"**{col}:** {fmt(row.get(col))}")
@@ -226,3 +225,10 @@ if sel_f != "Select":
     serv_col = find_col(service_df, ["fabrication"])
     if serv_col:
         st.dataframe(service_df[service_df[serv_col].astype(str) == sel_f])
+
+# ==============================
+# LOGOUT
+# ==============================
+if st.sidebar.button("Logout"):
+    st.session_state["login"] = False
+    st.rerun()
