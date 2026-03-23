@@ -1,36 +1,44 @@
 import streamlit as st
 import pandas as pd
 import os
-from datetime import datetime
 from io import BytesIO
+import plotly.express as px
 
-# --- PAGE CONFIG ---
-st.set_page_config(page_title="ELGi Global Tracker Pro", layout="wide")
+# ==============================
+# 🔐 LOGIN
+# ==============================
+USER_CREDENTIALS = {"admin": "1234"}
 
-# --- SMART DATA LOADER ---
-@st.cache_data
-def load_data():
-    f_list = os.listdir('.')
-    def find_f(base):
-        for f in f_list:
-            if f.lower().startswith(base.lower()): return f
-        return None
-    m_n, m_od_n, s_n, f_n = find_f("Master_Data"), find_f("Master_OD_Data"), find_f("Service_Details"), find_f("Active_FOC")
-    try:
-        m_df = pd.read_excel(m_n, engine='openpyxl') if m_n else pd.DataFrame()
-        m_od_df = pd.read_excel(m_od_n, engine='openpyxl') if m_od_n else pd.DataFrame()
-        s_df = pd.read_excel(s_n, engine='openpyxl') if s_n else pd.DataFrame()
-        f_df = pd.read_excel(f_n, engine='openpyxl') if f_n else pd.DataFrame()
-        for d in [m_df, m_od_df, s_df, f_df]:
-            if not d.empty: 
-                d.columns = [str(c).strip() for c in d.columns]
-        return m_df, m_od_df, s_df, f_df
-    except: return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+def login():
+    st.title("🔐 ELGi Login")
+    u = st.text_input("Username")
+    p = st.text_input("Password", type="password")
 
-def format_dt(dt):
-    if pd.isna(dt) or dt == 0 or str(dt).lower() in ["nan", "nat"]: return "N/A"
-    try: return pd.to_datetime(dt).strftime('%d-%b-%y')
-    except: return str(dt)
+    if st.button("Login"):
+        if u in USER_CREDENTIALS and USER_CREDENTIALS[u] == p:
+            st.session_state["login"] = True
+            st.rerun()
+        else:
+            st.error("Invalid Credentials")
+
+if "login" not in st.session_state:
+    st.session_state["login"] = False
+
+if not st.session_state["login"]:
+    login()
+    st.stop()
+
+# ==============================
+# ⚙️ CONFIG
+# ==============================
+st.set_page_config(layout="wide")
+st.markdown("<style>.block-container{padding:1rem;}</style>", unsafe_allow_html=True)
+
+# ==============================
+# 🧠 HELPERS
+# ==============================
+def find_col(df, key):
+    return next((c for c in df.columns if key.lower() in c.lower()), None)
 
 def to_excel(df):
     output = BytesIO()
@@ -38,158 +46,161 @@ def to_excel(df):
         df.to_excel(writer, index=False)
     return output.getvalue()
 
-master_df, master_od_df, service_df, foc_df = load_data()
+def fmt(dt):
+    try:
+        return pd.to_datetime(dt).strftime('%d-%b-%y')
+    except:
+        return "N/A"
 
-# --- SIDEBAR MENU & SMART METRICS ---
-st.sidebar.title("🏢 ELGi Global Menu")
-page_choice = st.sidebar.radio("Go To Dashboard:", ["1. DPSAC Tracker", "2. INDUSTRIAL Tracker"])
+# ==============================
+# 📂 LOAD DATA
+# ==============================
+@st.cache_data
+def load():
+    files = os.listdir('.')
+    def f(x): return next((i for i in files if x.lower() in i.lower()), None)
 
-st.sidebar.markdown("---")
-st.sidebar.subheader("📊 Unit Status (Sidebar)")
+    return (
+        pd.read_excel(f("Master_Data")) if f("Master_Data") else pd.DataFrame(),
+        pd.read_excel(f("Master_OD_Data")) if f("Master_OD_Data") else pd.DataFrame(),
+        pd.read_excel(f("FOC")) if f("FOC") else pd.DataFrame(),
+        pd.read_excel(f("Service")) if f("Service") else pd.DataFrame()
+    )
 
-# --- SMART METRICS COUNTER (FIXED) ---
-# --- SMART METRICS COUNTER (ULTRA-FIXED) ---
-def get_sidebar_metrics(df):
-    if df.empty: return 0, 0, 0, 0
-    # Step 1: Find Column (Unit Status)
-    s_col = next((c for c in df.columns if 'status' in c.lower()), None)
-    if not s_col: return len(df), 0, 0, 0
-    
-    # Step 2: Clean and Normalize the data (Force visibility)
-    # Hum 'contains' use kar rahe hain taaki extra space ya case-sensitive issues na aayein
-    total = len(df)
-    active = len(df[df[s_col].astype(str).str.contains('Active', case=False, na=False)])
-    shifted = len(df[df[s_col].astype(str).str.contains('Shifted', case=False, na=False)])
-    sold = len(df[df[s_col].astype(str).str.contains('Sold', case=False, na=False)])
-    
-    # Backup: Agar 'Shifted' ki jagah kuch aur hai, toh manually list check karein
-    return total, active, shifted, sold
+master_df, master_od_df, foc_df, service_df = load()
 
-# --- Sidebar Display ---
-t, a, sh, so = get_sidebar_metrics(master_df if page_choice == "1. DPSAC Tracker" else master_od_df)
+# ==============================
+# 📊 COMMON DASHBOARD FUNCTION
+# ==============================
+def dashboard(df, title):
+    st.title(title)
 
-st.sidebar.metric("📦 Total Units", t)
-st.sidebar.metric("🟢 Active", a)
-st.sidebar.metric("🔵 Shifted", sh)
-st.sidebar.metric("🟠 Sold", so)
-# ==========================================
-# 1. DPSAC TRACKER (Standard)
-# ==========================================
-if page_choice == "1. DPSAC Tracker":
-    st.title("🛠️ DPSAC Tracker - Standard Machine Data")
-    s_col = next((c for c in master_df.columns if 'status' in c.lower()), "Unit Status")
-    
-    st.sidebar.markdown("---")
-    status_choice = st.sidebar.selectbox("Filter Status List:", ["None", "Active", "Shifted", "Sold"], key="std_filter")
-    if status_choice != "None":
-        st.subheader(f"📋 {status_choice} Machines")
-        f_list = master_df[master_df[s_col].astype(str).str.contains(status_choice, case=False, na=False)]
-        st.download_button(f"📥 Export {status_choice}", to_excel(f_list), f"DPSAC_{status_choice}.xlsx")
-        st.dataframe(f_list[['Fabrication No', 'CUSTOMER NAME', 'MODEL', s_col]], use_container_width=True)
+    status_col = find_col(df, "status")
+    cust_col = find_col(df, "customer")
+    fab_col = find_col(df, "fabrication")
 
-    tabs = st.tabs(["Machine Tracker", "FOC List", "Service Pending"])
-    with tabs[0]:
-        c1, c2 = st.columns(2)
-        sel_c = c1.selectbox("Select Customer", ["All"] + sorted(master_df['CUSTOMER NAME'].unique().astype(str)), key="std_c_sel")
-        df_f = master_df if sel_c == "All" else master_df[master_df['CUSTOMER NAME'] == sel_c]
-        sel_f = c2.selectbox("Select Fabrication No", ["Select"] + sorted(df_f['Fabrication No'].astype(str).unique()), key="std_f_sel")
-        
+    # METRICS
+    if status_col:
+        total = len(df)
+        active = len(df[df[status_col].astype(str).str.contains("Active", case=False)])
+        shifted = len(df[df[status_col].astype(str).str.contains("Shifted", case=False)])
+        sold = len(df[df[status_col].astype(str).str.contains("Sold", case=False)])
+
+        st.markdown(f"""
+        | Total | Active | Shifted | Sold |
+        |---|---|---|---|
+        | {total} | {active} | {shifted} | {sold} |
+        """)
+
+    # CHARTS
+    st.subheader("📊 Analytics")
+    c1, c2 = st.columns(2)
+
+    if status_col:
+        s = df[status_col].value_counts().reset_index()
+        s.columns = ["Status", "Count"]
+        c1.plotly_chart(px.pie(s, names="Status", values="Count"), use_container_width=True)
+
+    if cust_col:
+        c = df[cust_col].value_counts().head(10).reset_index()
+        c.columns = ["Customer", "Count"]
+        c2.plotly_chart(px.bar(c, x="Customer", y="Count"), use_container_width=True)
+
+    # ALERT
+    over_col = find_col(df, "over")
+    if over_col:
+        alerts = df[df[over_col] != 0]
+        if not alerts.empty:
+            st.error(f"🚨 {len(alerts)} Machines Overdue!")
+
+    # TABS
+    tab1, tab2, tab3 = st.tabs(["Machine Tracker", "FOC List", "Service Pending"])
+
+    # MACHINE TRACKER
+    with tab1:
+        col1, col2 = st.columns(2)
+
+        customers = ["All"] + sorted(df[cust_col].astype(str).unique())
+        sel_c = col1.selectbox("Customer", customers, key=title+"c")
+
+        df_f = df if sel_c == "All" else df[df[cust_col] == sel_c]
+
+        fabs = ["Select"] + sorted(df_f[fab_col].astype(str).unique())
+        sel_f = col2.selectbox("Fabrication No", fabs, key=title+"f")
+
         if sel_f != "Select":
-            row = df_f[df_f['Fabrication No'].astype(str) == sel_f].iloc[0]
-            curr_h = pd.to_numeric(row.get('HMR Cal.', 0), errors='coerce')
-            last_h = pd.to_numeric(row.get('Last Call HMR', 0), errors='coerce')
-            elapsed = (curr_h - last_h) if curr_h > last_h else 0
-            
-            # --- RENDER 4 BLOCKS ---
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.info("📋 Info")
-                st.write(f"**Customer:** {row.get('CUSTOMER NAME')}\n**Model:** {row.get('MODEL')}\n**Status:** `{row.get(s_col, 'N/A')}`\n**Running Hrs:** {curr_h}")
-            with col2:
-                st.info("📅 Replacement")
-                p_std = {'Oil':'Oil Replacement Date','AFC':'Air filter Compressor Replaced Date','AFE':'Air filter Engine Replaced Date','MOF':'Main Oil filter Replaced Date','ROF':'Return Oil filter Replaced Date','AOS':'AOS Replaced Date','RGT':'Greasing Done Date','1500K':'1500 Valve kit Replaced Date','3000K':'3000 Valve kit Replaced Date'}
-                for k, v in p_std.items(): st.write(f"**{k}:** {format_dt(row.get(v))}")
-            with col3:
-                st.info("⚙️ Remaining")
-                r_std = {'Oil':'HMR - Oil remaining','AFC':'Air filter replaced - Compressor Remaining Hours','AFE':'Air filter replaced - Engine Remaining Hours','MOF':'Main Oil filter Remaining Hours','ROF':'Return Oil filter Remaining Hours','AOS':'HMR - Separator remaining','RGT':'HMR - Motor regressed remaining','1500K':'1500 Valve kit Remaining Hours','3000K':'3000 Valve kit Remaining Hours'}
-                for k, v in r_std.items():
-                    val = pd.to_numeric(row.get(v, 0), errors='coerce')
-                    rem = int((val if pd.notna(val) else 0) - elapsed)
-                    st.write(f"**{k}:** {rem} Hrs" if rem > 0 else f"**{k}:** 🚨 {rem}")
-            with col4:
-                st.error("🚨 Due Date")
-                d_std = {'OIL':'OIL DUE DATE','AFC':'AFC DUE DATE','AFE':'AFE DUE DATE','MOF':'MOF DUE DATE','ROF':'ROF DUE DATE','AOS':'AOS DUE DATE','RGT':'RGT DUE DATE','1500K':'1500 KIT DUE DATE','3000K':'3000 KIT DUE DATE'}
-                for k, v in d_std.items(): st.write(f"**{k}:** {format_dt(row.get(v))}")
+            row = df_f[df_f[fab_col].astype(str) == sel_f].iloc[0]
 
-            st.divider()
-            f_col = next((c for c in foc_df.columns if 'FABRICATION' in str(c).upper()), "FABRICATION NO")
-            f_m = foc_df[foc_df[f_col].astype(str) == sel_f] if not foc_df.empty else pd.DataFrame()
-            st.subheader("🎁 Machine FOC Details")
-            st.dataframe(f_m[['Created On','Part Code','Qty','ELGI IVOICE NO.']] if not f_m.empty else pd.DataFrame(), use_container_width=True)
-            
-            st.subheader("🕒 Service History")
-            h_m = service_df[service_df['Fabrication Number'].astype(str) == sel_f].sort_values(by='Call Logged Date', ascending=False)
-            for _, s in h_m.iterrows():
-                with st.expander(f"📅 {format_dt(s.get('Call Logged Date'))} | ⚙️ {s.get('Call HMR')} HMR"):
-                    st.write(f"**Engineer:** {s.get('Service Engineer')}\n**Comments:** {s.get('Service Engineer Comments')}")
+            c1, c2, c3, c4 = st.columns(4)
 
-# ==========================================
-# 2. INDUSTRIAL TRACKER (Industrial)
-# ==========================================
-elif page_choice == "2. INDUSTRIAL Tracker":
-    st.title("🛡️ INDUSTRIAL Tracker - Industrial Data")
-    s_col_i = next((c for c in master_od_df.columns if 'status' in c.lower()), "Unit Status")
-    
-    st.sidebar.markdown("---")
-    status_choice_i = st.sidebar.selectbox("Filter Status List:", ["None", "Active", "Shifted", "Sold"], key="ind_filter")
-    if status_choice_i != "None":
-        st.subheader(f"📋 {status_choice_i} Machines")
-        f_list_i = master_od_df[master_od_df[s_col_i].astype(str).str.contains(status_choice_i, case=False, na=False)]
-        st.download_button(f"📥 Export {status_choice_i}", to_excel(f_list_i), f"Industrial_{status_choice_i}.xlsx")
-        st.dataframe(f_list_i[['Fabrication No', 'Customer Name', 'Model', s_col_i]], use_container_width=True)
+            with c1:
+                st.info("Customer Info")
+                st.write(f"Customer: {row.get(cust_col)}")
+                st.write(f"Model: {row.get(find_col(df,'model'))}")
+                st.write(f"Warranty: {row.get(find_col(df,'warranty'))}")
+                st.write(f"Location: {row.get(find_col(df,'location'))}")
+                st.write(f"Avg Run Hrs: {row.get(find_col(df,'avg'))}")
+                st.write(f"Running Hrs: {row.get(find_col(df,'hmr'))}")
 
-    tabs_i = st.tabs(["Machine Tracker", "FOC List", "Service Pending"])
-    with tabs_i[0]:
-        ci1, ci2 = st.columns(2)
-        sel_ci = ci1.selectbox("Select Customer", ["All"] + sorted(master_od_df['Customer Name'].unique().astype(str)), key="ind_c_sel")
-        df_fi = master_od_df if sel_ci == "All" else master_od_df[master_od_df['Customer Name'] == sel_ci]
-        sel_fi = ci2.selectbox("Select Fabrication No", ["Select"] + sorted(df_fi['Fabrication No'].astype(str).unique()), key="ind_f_sel")
+            with c2:
+                st.info("Replacement Dates")
+                for col in df.columns:
+                    if "replaced" in col.lower():
+                        st.write(f"{col}: {fmt(row.get(col))}")
 
-        if sel_fi != "Select":
-            row_i = df_fi[df_fi['Fabrication No'].astype(str) == sel_fi].iloc[0]
-            h_dt = pd.to_datetime(row_i.get('MDA HMR Date'), errors='coerce')
-            days = (pd.Timestamp(datetime.now().date()) - h_dt).days if pd.notna(h_dt) else 0
-            avg_r = pd.to_numeric(row_i.get('MDA AVG Running Hours Per Day', 0), errors='coerce')
-            elapsed_i = days * (avg_r if pd.notna(avg_r) else 0)
+            with c3:
+                st.info("Remaining Hours")
+                for col in df.columns:
+                    if "remaining" in col.lower():
+                        st.write(f"{col}: {row.get(col)}")
 
-            col_i1, col_i2, col_i3, col_i4 = st.columns(4)
-            with col_i1:
-                st.info("📋 Info")
-                st.write(f"**Customer:** {row_i.get('Customer Name')}\n**Model:** {row_i.get('Model')}\n**Status:** `{row_i.get(s_col_i, 'N/A')}`\n**Running Hrs:** {row_i.get('MDA Total Hours', 'N/A')}")
-            with col_i2:
-                st.info("📅 Replacement")
-                p_ind = {'Oil':'MDA Oil R Date','AF':'MDA AF R Date','OF':'MDA OF R Date','AOS':'MDA AOS R Date','RGT':'MDA RGT R Date','VK':'MDA Valvekit R Date','PF':'MDA PF R DATE','FF':'MDA FF R DATE','CF':'MDA CF R DATE'}
-                for k, v in p_ind.items(): st.write(f"**{k}:** {format_dt(row_i.get(v))}")
-            with col_i3:
-                st.info("⚙️ Remaining")
-                r_ind = {'Oil':'MDA OIL Remaining Hours','AF':'AF Remaining Hours','AOS':'AOS Remaining Hours','RGT':'RGT Remaining Hours','VK':'Valve Kit Remaining Hours','PF':'PF DUE','FF':'FF DUE','CF':'CF DUE'}
-                for k, v in r_ind.items():
-                    val = pd.to_numeric(row_i.get(v, 0), errors='coerce')
-                    rem = int((val if pd.notna(val) else 0) - elapsed_i)
-                    st.write(f"**{k}:** {rem} Hrs" if rem > 0 else f"**{k}:** 🚨 {rem}")
-            with col_i4:
-                st.error("🚨 Due Date")
-                d_ind = {'Oil':'OIL DUE DATE','AF':'AF DUE DATE','AOS':'AOS DUE DATE','VK':'VALVEKIT DUE DATE','RGT':'RGT DUE DATE','PF':'PF DUE DATE','FF':'FF DUE DATE','CF':'CF DUE DATE'}
-                for k, v in d_ind.items(): st.write(f"**{k}:** {format_dt(row_i.get(v))}")
+            with c4:
+                st.error("Due Dates")
+                for col in df.columns:
+                    if "due" in col.lower():
+                        st.write(f"{col}: {fmt(row.get(col))}")
 
-            st.divider()
-            f_col_i = next((c for c in foc_df.columns if 'FABRICATION' in str(c).upper()), "FABRICATION NO")
-            fi_m = foc_df[foc_df[f_col_i].astype(str) == sel_fi] if not foc_df.empty else pd.DataFrame()
-            st.subheader("🎁 Machine FOC Details")
-            st.dataframe(fi_m[['Created On','Part Code','Qty','ELGI IVOICE NO.']] if not fi_m.empty else pd.DataFrame(), use_container_width=True)
-            
-            st.subheader("🕒 Service History")
-            hi_m = service_df[service_df['Fabrication Number'].astype(str) == sel_fi].sort_values(by='Call Logged Date', ascending=False)
-            for _, si in hi_m.iterrows():
-                with st.expander(f"📅 {format_dt(si.get('Call Logged Date'))} | ⚙️ {si.get('Call HMR')} HMR"):
-                    st.write(f"**Engineer:** {si.get('Service Engineer')}\n**Comments:** {si.get('Service Engineer Comments')}")
+            # FOC
+            foc_col = find_col(foc_df, "fabrication")
+            if foc_col:
+                foc_data = foc_df[foc_df[foc_col].astype(str) == sel_f]
+                st.subheader("🎁 FOC Details")
+                st.dataframe(foc_data)
+
+            # SERVICE
+            serv_col = find_col(service_df, "fabrication")
+            if serv_col:
+                serv_data = service_df[service_df[serv_col].astype(str) == sel_f]
+                st.subheader("🕒 Service History")
+                st.dataframe(serv_data)
+
+    # FOC LIST
+    with tab2:
+        st.download_button("Export FOC", to_excel(foc_df), f"{title}_FOC.xlsx")
+        st.dataframe(foc_df)
+
+    # SERVICE PENDING
+    with tab3:
+        if over_col:
+            p = df[df[over_col] != 0]
+            st.write(f"Pending Count: {len(p)}")
+            st.dataframe(p)
+
+# ==============================
+# 🧭 MENU
+# ==============================
+st.sidebar.title("🏢 ELGi Menu")
+choice = st.sidebar.radio("Select Tracker", ["DPSAC Tracker", "INDUSTRIAL Tracker"])
+
+if choice == "DPSAC Tracker":
+    dashboard(master_df, "DPSAC Tracker - Standard Machine Data")
+
+else:
+    dashboard(master_od_df, "INDUSTRIAL Tracker - Industrial Data")
+
+# ==============================
+# 🚪 LOGOUT
+# ==============================
+if st.sidebar.button("Logout"):
+    st.session_state["login"] = False
+    st.rerun()
