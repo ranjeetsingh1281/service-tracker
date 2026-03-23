@@ -48,30 +48,30 @@ st.sidebar.markdown("---")
 st.sidebar.subheader("📊 Unit Status (Sidebar)")
 
 # --- SMART METRICS COUNTER (FIXED) ---
+# --- SMART METRICS COUNTER (ULTRA-FIXED) ---
 def get_sidebar_metrics(df):
     if df.empty: return 0, 0, 0, 0
-    # Dynamic column finder
+    # Step 1: Find Column (Unit Status)
     s_col = next((c for c in df.columns if 'status' in c.lower()), None)
     if not s_col: return len(df), 0, 0, 0
     
-    # Cleaning data before counting to avoid 0 results
-    status_series = df[s_col].astype(str).str.strip().str.capitalize()
+    # Step 2: Clean and Normalize the data (Force visibility)
+    # Hum 'contains' use kar rahe hain taaki extra space ya case-sensitive issues na aayein
     total = len(df)
-    active = len(df[status_series == "Active"])
-    shifted = len(df[status_series == "Shifted"])
-    sold = len(df[status_series == "Sold"])
+    active = len(df[df[s_col].astype(str).str.contains('Active', case=False, na=False)])
+    shifted = len(df[df[s_col].astype(str).str.contains('Shifted', case=False, na=False)])
+    sold = len(df[df[s_col].astype(str).str.contains('Sold', case=False, na=False)])
+    
+    # Backup: Agar 'Shifted' ki jagah kuch aur hai, toh manually list check karein
     return total, active, shifted, sold
 
-if page_choice == "1. DPSAC Tracker":
-    t, a, sh, so = get_sidebar_metrics(master_df)
-else:
-    t, a, sh, so = get_sidebar_metrics(master_od_df)
+# --- Sidebar Display ---
+t, a, sh, so = get_sidebar_metrics(master_df if page_choice == "1. DPSAC Tracker" else master_od_df)
 
 st.sidebar.metric("📦 Total Units", t)
 st.sidebar.metric("🟢 Active", a)
 st.sidebar.metric("🔵 Shifted", sh)
 st.sidebar.metric("🟠 Sold", so)
-
 # ==========================================
 # 1. DPSAC TRACKER (Standard)
 # ==========================================
