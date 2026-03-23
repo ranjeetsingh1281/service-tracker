@@ -22,7 +22,8 @@ def load_data():
         s_df = pd.read_excel(s_n, engine='openpyxl') if s_n else pd.DataFrame()
         f_df = pd.read_excel(f_n, engine='openpyxl') if f_n else pd.DataFrame()
         for d in [m_df, m_od_df, s_df, f_df]:
-            if not d.empty: d.columns = [str(c).strip() for c in d.columns]
+            if not d.empty: 
+                d.columns = [str(c).strip() for c in d.columns]
         return m_df, m_od_df, s_df, f_df
     except: return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
@@ -39,28 +40,37 @@ def to_excel(df):
 
 master_df, master_od_df, service_df, foc_df = load_data()
 
-# --- SIDEBAR MENU & METRICS ---
+# --- SIDEBAR MENU & SMART METRICS ---
 st.sidebar.title("🏢 ELGi Global Menu")
 page_choice = st.sidebar.radio("Go To Dashboard:", ["1. DPSAC Tracker", "2. INDUSTRIAL Tracker"])
 
-# --- RENDER SIDEBAR METRICS BASED ON SELECTION ---
 st.sidebar.markdown("---")
 st.sidebar.subheader("📊 Unit Status (Sidebar)")
 
-if page_choice == "1. DPSAC Tracker" and not master_df.empty:
-    curr_df = master_df
-    s_col = next((c for c in curr_df.columns if 'status' in c.lower()), "Unit Status")
-    st.sidebar.metric("📦 Total Units", len(curr_df))
-    st.sidebar.metric("🟢 Active", len(curr_df[curr_df[s_col].astype(str).str.contains('Active', case=False, na=False)]))
-    st.sidebar.metric("🔵 Shifted", len(curr_df[curr_df[s_col].astype(str).str.contains('Shifted', case=False, na=False)]))
-    st.sidebar.metric("🟠 Sold", len(curr_df[curr_df[s_col].astype(str).str.contains('Sold', case=False, na=False)]))
-elif page_choice == "2. INDUSTRIAL Tracker" and not master_od_df.empty:
-    curr_df = master_od_df
-    s_col = next((c for c in curr_df.columns if 'status' in c.lower()), "Unit Status")
-    st.sidebar.metric("📦 Total Units", len(curr_df))
-    st.sidebar.metric("🟢 Active", len(curr_df[curr_df[s_col].astype(str).str.contains('Active', case=False, na=False)]))
-    st.sidebar.metric("🔵 Shifted", len(curr_df[curr_df[s_col].astype(str).str.contains('Shifted', case=False, na=False)]))
-    st.sidebar.metric("🟠 Sold", len(curr_df[curr_df[s_col].astype(str).str.contains('Sold', case=False, na=False)]))
+# --- SMART METRICS COUNTER (FIXED) ---
+def get_sidebar_metrics(df):
+    if df.empty: return 0, 0, 0, 0
+    # Dynamic column finder
+    s_col = next((c for c in df.columns if 'status' in c.lower()), None)
+    if not s_col: return len(df), 0, 0, 0
+    
+    # Cleaning data before counting to avoid 0 results
+    status_series = df[s_col].astype(str).str.strip().str.capitalize()
+    total = len(df)
+    active = len(df[status_series == "Active"])
+    shifted = len(df[status_series == "Shifted"])
+    sold = len(df[status_series == "Sold"])
+    return total, active, shifted, sold
+
+if page_choice == "1. DPSAC Tracker":
+    t, a, sh, so = get_sidebar_metrics(master_df)
+else:
+    t, a, sh, so = get_sidebar_metrics(master_od_df)
+
+st.sidebar.metric("📦 Total Units", t)
+st.sidebar.metric("🟢 Active", a)
+st.sidebar.metric("🔵 Shifted", sh)
+st.sidebar.metric("🟠 Sold", so)
 
 # ==========================================
 # 1. DPSAC TRACKER (Standard)
@@ -90,6 +100,7 @@ if page_choice == "1. DPSAC Tracker":
             last_h = pd.to_numeric(row.get('Last Call HMR', 0), errors='coerce')
             elapsed = (curr_h - last_h) if curr_h > last_h else 0
             
+            # --- RENDER 4 BLOCKS ---
             col1, col2, col3, col4 = st.columns(4)
             with col1:
                 st.info("📋 Info")
@@ -161,14 +172,14 @@ elif page_choice == "2. INDUSTRIAL Tracker":
                 for k, v in p_ind.items(): st.write(f"**{k}:** {format_dt(row_i.get(v))}")
             with col_i3:
                 st.info("⚙️ Remaining")
-                r_ind = {'Oil':'MDA OIL Remaining Hours','AF':'AF Remaining Hours','OF':'OF Remaining Hours','AOS':'AOS Remaining Hours','RGT':'RGT Remaining Hours','VK':'Valve Kit Remaining Hours','PF':'PF DUE','FF':'FF DUE','CF':'CF DUE'}
+                r_ind = {'Oil':'MDA OIL Remaining Hours','AF':'AF Remaining Hours','AOS':'AOS Remaining Hours','RGT':'RGT Remaining Hours','VK':'Valve Kit Remaining Hours','PF':'PF DUE','FF':'FF DUE','CF':'CF DUE'}
                 for k, v in r_ind.items():
                     val = pd.to_numeric(row_i.get(v, 0), errors='coerce')
                     rem = int((val if pd.notna(val) else 0) - elapsed_i)
                     st.write(f"**{k}:** {rem} Hrs" if rem > 0 else f"**{k}:** 🚨 {rem}")
             with col_i4:
                 st.error("🚨 Due Date")
-                d_ind = {'Oil':'OIL DUE DATE','AF':'AF DUE DATE','OF':'OF DUE DATE','AOS':'AOS DUE DATE','VK':'VALVEKIT DUE DATE','RGT':'RGT DUE DATE','PF':'PF DUE DATE','FF':'FF DUE DATE','CF':'CF DUE DATE'}
+                d_ind = {'Oil':'OIL DUE DATE','AF':'AF DUE DATE','AOS':'AOS DUE DATE','VK':'VALVEKIT DUE DATE','RGT':'RGT DUE DATE','PF':'PF DUE DATE','FF':'FF DUE DATE','CF':'CF DUE DATE'}
                 for k, v in d_ind.items(): st.write(f"**{k}:** {format_dt(row_i.get(v))}")
 
             st.divider()
