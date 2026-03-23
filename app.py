@@ -154,51 +154,106 @@ def dashboard(df, title, industrial=False):
             # ==============================
             # COLUMN 2
             # ==============================
-            with c2:
-                st.markdown("### **Replacement Dates**")
+           with c2:
+    st.markdown("### **🔧 Replacement Dates**")
 
-                if industrial:
-                    cols = ["MDA Oil R Date","MDA AF R Date","MDA OF R Date",
-                            "MDA AOS R Date","MDA RGT R Date","MDA Valvekit R Date",
-                            "MDA PF R DATE","MDA FF R DATE","MDA CF R DATE"]
-                else:
-                    cols = ["Oil R-Date","AFC R-Date","AFE R-Date","MOF R-Date",
-                            "ROF R-Date","AOS R-Date","Greasing R-Date",
-                            "1500 Kit R-Date","3000 Kit R-Date"]
+    if not industrial:  # DPSAC
+        rep_map = {
+            "Oil": "Oil R-Date",
+            "AFC": "AFC R-Date",
+            "AFE": "AFE R-Date",
+            "MOF": "MOF R-Date",
+            "ROF": "ROF R-Date",
+            "AOS": "AOS R-Date",
+            "RGT": "Greasing R-Date",
+            "1500K": "1500 Kit R-Date",
+            "3000K": "3000 Kit R-Date"
+        }
+    else:  # INDUSTRIAL
+        rep_map = {
+            "Oil": "MDA Oil R Date",
+            "AF": "MDA AF R Date",
+            "OF": "MDA OF R Date",
+            "AOS": "MDA AOS R Date",
+            "RGT": "MDA RGT R Date",
+            "VK": "MDA Valvekit R Date",
+            "PF": "MDA PF R DATE",
+            "FF": "MDA FF R DATE",
+            "CF": "MDA CF R DATE"
+        }
 
-                for col in cols:
-                    st.write(f"**{col}:** {fmt(row.get(col))}")
-
+    for k, v in rep_map.items():
+        col = safe_col(df, v)
+        st.write(f"**{k}:** {fmt(row.get(col)) if col else 'N/A'}")
+        
             # ==============================
             # COLUMN 3
             # ==============================
             with c3:
-                st.markdown("### **Remaining Hours**")
+    st.markdown("### **⚙️ Remaining Hours**")
 
-                if industrial:
-                    cols = ["AF Rem. HMR Till date","OF Rem. HMR Till date",
-                            "OIL Rem. HMR Till date","AOS Rem. HMR Till date",
-                            "VK Rem. HMR Till date","RGT Rem. HMR Till date"]
-                    for col in cols:
-                        st.write(f"**{col}:** {row.get(col)}")
-                else:
-                    st.write("**Live Remaining:** calculated")
+    if not industrial:
+        rem_map = {
+            "Oil": "HMR - Oil remaining",
+            "AFC": "Air filter Compressor Remaining Hours",
+            "AFE": "Air filter Engine Remaining Hours",
+            "MOF": "Main Oil filter Remaining Hours",
+            "ROF": "Return Oil filter Remaining Hours",
+            "AOS": "Separator Remaining Hours",
+            "RGT": "Motor Greasing Remaining Hours",
+            "1500K": "1500 Kit Remaining Hours",
+            "3000K": "3000 Kit Remaining Hours"
+        }
+    else:
+        rem_map = {
+            "AF": "AF Rem. HMR Till date",
+            "OF": "OF Rem. HMR Till date",
+            "OIL": "OIL Rem. HMR Till date",
+            "AOS": "AOS Rem. HMR Till date",
+            "VK": "VK Rem. HMR Till date",
+            "RGT": "RGT Rem. HMR Till date"
+        }
 
+    for k, v in rem_map.items():
+        col = safe_col(df, v)
+        val = row.get(col) if col else None
+        st.write(f"**{k}:** {val if pd.notna(val) else 'N/A'}")
+        
             # ==============================
             # COLUMN 4
             # ==============================
             with c4:
-                st.markdown("### **Due Dates**")
+    st.markdown("### **🚨 Due Dates**")
 
-                if industrial:
-                    cols = ["AF DUE DATE","OF DUE DATE","OIL DUE DATE",
-                            "AOS DUE DATE","VALVEKIT DUE DATE","RGT DUE DATE",
-                            "PF DUE DATE","FF DUE DATE","CF DUE DATE"]
-                else:
-                    cols = [c for c in df.columns if "due" in c.lower()]
+    if not industrial:
+        due_map = {
+            "OIL": "OIL DUE DATE",
+            "AFC": "AFC DUE DATE",
+            "AFE": "AFE DUE DATE",
+            "MOF": "MOF DUE DATE",
+            "ROF": "ROF DUE DATE",
+            "AOS": "AOS DUE DATE",
+            "RGT": "RGT DUE DATE",
+            "1500K": "1500 KIT DUE DATE",
+            "3000K": "3000 KIT DUE DATE"
+        }
+    else:
+        due_map = {
+            "AF": "AF DUE DATE",
+            "OF": "OF DUE DATE",
+            "OIL": "OIL DUE DATE",
+            "AOS": "AOS DUE DATE",
+            "VK": "VALVEKIT DUE DATE",
+            "RGT": "RGT DUE DATE",
+            "PF": "PF DUE DATE",
+            "FF": "FF DUE DATE",
+            "CF": "CF DUE DATE"
+        }
 
-                for col in cols:
-                    st.write(f"**{col}:** {fmt(row.get(col))}")
+    for k, v in due_map.items():
+        col = safe_col(df, v)
+        st.write(f"**{k}:** {fmt(row.get(col)) if col else 'N/A'}")
+        
 
             # ==============================
             # FOC
