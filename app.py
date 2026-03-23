@@ -70,9 +70,9 @@ st.sidebar.title("🏢 ELGi Menu")
 choice = st.sidebar.radio("Select Tracker", ["DPSAC Tracker", "INDUSTRIAL Tracker"])
 
 # ==============================
-# 🚀 DASHBOARD FUNCTION
+# 🚀 DASHBOARD
 # ==============================
-def dashboard(df, title, industrial=False):
+def dashboard(df, title):
 
     st.title(f"🛠️ {title}")
 
@@ -82,7 +82,7 @@ def dashboard(df, title, industrial=False):
     cat_col = next((c for c in df.columns if "category" in c.lower()), None)
 
     # ==============================
-    # METRICS
+    # 📊 METRICS
     # ==============================
     if status_col:
         total = len(df)
@@ -108,14 +108,14 @@ def dashboard(df, title, industrial=False):
             st.sidebar.write(f"{k}: {v}")
 
     # ==============================
-    # MACHINE TRACKER
+    # TRACKER
     # ==============================
     tab1, tab2, tab3 = st.tabs(["Machine Tracker", "FOC List", "Service Pending"])
 
     with tab1:
 
         if not cust_col or not fab_col:
-            st.error("Required columns missing")
+            st.error("Missing required columns")
             return
 
         col1, col2 = st.columns(2)
@@ -132,7 +132,9 @@ def dashboard(df, title, industrial=False):
 
             row = df_f[df_f[fab_col].astype(str) == sel_f].iloc[0]
 
-            # 👉 SAME LEVEL (IMPORTANT)
+            # ==============================
+            # 4 COLUMNS (SAFE BLOCK)
+            # ==============================
             c1, c2, c3, c4 = st.columns(4)
 
             # COLUMN 1
@@ -147,98 +149,46 @@ def dashboard(df, title, industrial=False):
             with c2:
                 st.markdown("### **Replacement Dates**")
 
-                rep_map = {
-                    "Oil": ["Oil R-Date","Oil Replacement Date"],
-                    "AFC": ["AFC R-Date","Air filter Compressor Replaced Date"],
-                    "AFE": ["AFE R-Date","Air filter Engine Replaced Date"],
-                    "MOF": ["MOF R-Date","Main Oil filter Replaced Date"],
-                    "ROF": ["ROF R-Date","Return Oil filter Replaced Date"],
-                    "AOS": ["AOS R-Date","AOS Replaced Date"],
-                    "RGT": ["Greasing R-Date","Greasing Done Date"],
-                    "1500K": ["1500 Kit R-Date","1500 Valve kit Replaced Date"],
-                    "3000K": ["3000 Kit R-Date","3000 Valve kit Replaced Date"]
-                }
+                rep_cols = [
+                    "Oil R-Date","AFC R-Date","AFE R-Date","MOF R-Date",
+                    "ROF R-Date","AOS R-Date","Greasing R-Date",
+                    "1500 Kit R-Date","3000 Kit R-Date"
+                ]
 
-                for k, options in rep_map.items():
-                    col = next((c for c in df.columns if c in options), None)
-                    st.write(f"{k}: {fmt(row.get(col)) if col else 'N/A'}")
+                for col_name in rep_cols:
+                    col = next((c for c in df.columns if col_name in c), None)
+                    st.write(f"{col_name}: {fmt(row.get(col)) if col else 'N/A'}")
 
-            # COLUMN 3 (FIXED + CALCULATION)
-           with c3:
-    st.markdown("### **⚙️ Remaining Hours (Live)**")
+            # COLUMN 3 (FINAL FIXED)
+            with c3:
+                st.markdown("### **Remaining Hours (Live)**")
 
-    # 🔍 Columns detect
-    last_hmr_col = next((c for c in df.columns if "last call hmr" in c.lower()), None)
-    avg_col = next((c for c in df.columns if "avg" in c.lower()), None)
-    date_col = next((c for c in df.columns if "last call" in c.lower() and "date" in c.lower()), None)
+                try:
+                    last_hmr = float(row.get(next((c for c in df.columns if "last call hmr" in c.lower()), None)) or 0)
+                    avg = float(row.get(next((c for c in df.columns if "avg" in c.lower()), None)) or 0)
+                    last_date = pd.to_datetime(row.get(next((c for c in df.columns if "last call" in c.lower() and "date" in c.lower()), None)))
 
-    try:
-        last_hmr = float(row.get(last_hmr_col) or 0)
-        avg = float(row.get(avg_col) or 0)
-        last_date = pd.to_datetime(row.get(date_col))
+                    days = (pd.Timestamp.today() - last_date).days
+                    live_hmr = int(last_hmr + (days * avg))
 
-        days = (pd.Timestamp.today() - last_date).days
-        live_hmr = int(last_hmr + (days * avg))
+                    st.write(f"Live HMR: {live_hmr}")
 
-        st.write(f"**Live HMR:** {live_hmr}")
+                except:
+                    st.write("Live HMR: N/A")
 
-    except:
-        st.write("Live HMR: N/A")
-        live_hmr = 0
-
-    # ==============================
-    # 🔧 Remaining Calculation
-    # ==============================
-    rem_map = {
-        "Oil": "HMR - Oil remaining",
-        "AFC": "Air filter Compressor Remaining Hours",
-        "AFE": "Air filter Engine Remaining Hours",
-        "MOF": "Main Oil filter Remaining Hours",
-        "ROF": "Return Oil filter Remaining Hours",
-        "AOS": "Separator Remaining Hours",
-        "RGT": "Motor Greasing Remaining Hours",
-        "1500K": "1500 Kit Remaining Hours",
-        "3000K": "3000 Kit Remaining Hours"
-    }
-
-    for part, col_name in rem_map.items():
-        col = next((c for c in df.columns if col_name.lower() in c.lower()), None)
-
-        if col:
-            next_service_hmr = row.get(col)
-
-            if pd.notna(next_service_hmr):
-                remaining = int(next_service_hmr - live_hmr)
-
-                if remaining > 0:
-                    st.write(f"**{part}:** 🟢 {remaining} Hrs")
-                elif remaining > -50:
-                    st.write(f"**{part}:** 🟡 {remaining} Hrs")
-                else:
-                    st.write(f"**{part}:** 🔴 {remaining} Hrs")
-            else:
-                st.write(f"**{part}:** N/A")
-        else:
-            st.write(f"**{part}:** Column Missing")
             # COLUMN 4
             with c4:
                 st.markdown("### **Due Dates**")
 
-                due_map = {
-                    "OIL":"OIL DUE DATE",
-                    "AFC":"AFC DUE DATE",
-                    "AFE":"AFE DUE DATE",
-                    "MOF":"MOF DUE DATE",
-                    "ROF":"ROF DUE DATE",
-                    "AOS":"AOS DUE DATE",
-                    "RGT":"RGT DUE DATE",
-                    "1500K":"1500 KIT DUE DATE",
-                    "3000K":"3000 KIT DUE DATE"
-                }
+                due_cols = [
+                    "OIL DUE DATE","AFC DUE DATE","AFE DUE DATE","MOF DUE DATE",
+                    "ROF DUE DATE","AOS DUE DATE","RGT DUE DATE",
+                    "1500 KIT DUE DATE","3000 KIT DUE DATE"
+                ]
 
-                for k, v in due_map.items():
-                    col = next((c for c in df.columns if v in c), None)
-                    st.write(f"{k}: {fmt(row.get(col)) if col else 'N/A'}")
+                for col_name in due_cols:
+                    col = next((c for c in df.columns if col_name in c), None)
+                    st.write(f"{col_name}: {fmt(row.get(col)) if col else 'N/A'}")
 
             # FOC
             st.subheader("🎁 FOC Details")
@@ -262,9 +212,9 @@ def dashboard(df, title, industrial=False):
 # RUN
 # ==============================
 if choice == "DPSAC Tracker":
-    dashboard(master_df, "DPSAC Tracker", False)
+    dashboard(master_df, "DPSAC Tracker")
 else:
-    dashboard(master_od_df, "INDUSTRIAL Tracker", True)
+    dashboard(master_od_df, "INDUSTRIAL Tracker")
 
 # ==============================
 # LOGOUT
