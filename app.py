@@ -141,23 +141,23 @@ def dashboard(df, title, industrial=False):
 
             c1, c2, c3, c4 = st.columns(4)
 
-            # ==============================
-            # COLUMN 1
-            # ==============================
-            with c1:
-                st.markdown("### **Customer Info**")
-                st.write(f"**Customer:** {row.get(cust_col)}")
-                st.write(f"**Model:** {row.get(safe_col(df,'model'))}")
-                st.write(f"**Location:** {row.get(safe_col(df,'location'))}")
-                st.write(f"**Running Hrs:** {row.get(safe_col(df,'hmr'))}")
-                
-            # ==============================
-            # COLUMN 2
-            # ==============================
-           with c2:
+# ==============================
+# COLUMN 1
+# ==============================
+with c1:
+    st.markdown("### **📋 Customer Info**")
+    st.write(f"**Customer:** {row.get(cust_col)}")
+    st.write(f"**Model:** {row.get(safe_col(df,'model'))}")
+    st.write(f"**Location:** {row.get(safe_col(df,'location'))}")
+    st.write(f"**Running Hrs:** {row.get(safe_col(df,'hmr'))}")
+
+# ==============================
+# COLUMN 2
+# ==============================
+with c2:
     st.markdown("### **🔧 Replacement Dates**")
 
-    if not industrial:  # DPSAC
+    if not industrial:
         rep_map = {
             "Oil": "Oil R-Date",
             "AFC": "AFC R-Date",
@@ -169,7 +169,7 @@ def dashboard(df, title, industrial=False):
             "1500K": "1500 Kit R-Date",
             "3000K": "3000 Kit R-Date"
         }
-    else:  # INDUSTRIAL
+    else:
         rep_map = {
             "Oil": "MDA Oil R Date",
             "AF": "MDA AF R Date",
@@ -185,11 +185,11 @@ def dashboard(df, title, industrial=False):
     for k, v in rep_map.items():
         col = safe_col(df, v)
         st.write(f"**{k}:** {fmt(row.get(col)) if col else 'N/A'}")
-        
-            # ==============================
-            # COLUMN 3
-            # ==============================
-            with c3:
+
+# ==============================
+# COLUMN 3
+# ==============================
+with c3:
     st.markdown("### **⚙️ Remaining Hours**")
 
     if not industrial:
@@ -218,11 +218,11 @@ def dashboard(df, title, industrial=False):
         col = safe_col(df, v)
         val = row.get(col) if col else None
         st.write(f"**{k}:** {val if pd.notna(val) else 'N/A'}")
-        
-            # ==============================
-            # COLUMN 4
-            # ==============================
-            with c4:
+
+# ==============================
+# COLUMN 4
+# ==============================
+with c4:
     st.markdown("### **🚨 Due Dates**")
 
     if not industrial:
@@ -253,7 +253,6 @@ def dashboard(df, title, industrial=False):
     for k, v in due_map.items():
         col = safe_col(df, v)
         st.write(f"**{k}:** {fmt(row.get(col)) if col else 'N/A'}")
-        
 
             # ==============================
             # FOC
