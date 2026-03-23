@@ -2,9 +2,9 @@ def dashboard(df, title, is_industrial=False):
 
     st.title(f"🛠️ {title}")
 
-    status_col = find_col(df, "status")
-    cust_col = find_col(df, "customer")
-    fab_col = find_col(df, "fabrication")
+    status_col = safe_col(df, "status")
+    cust_col = safe_col(df, "customer")
+    fab_col = safe_col(df, "fabrication")
 
     # ==============================
     # 📊 METRICS
@@ -22,7 +22,7 @@ def dashboard(df, title, is_industrial=False):
         """)
 
     # Category Count
-    cat_col = find_col(df, "category")
+    cat_col = safe_col(df, "category")
     if cat_col:
         st.subheader("📊 Category Distribution")
         cat_df = df[cat_col].value_counts().reset_index()
@@ -38,7 +38,11 @@ def dashboard(df, title, is_industrial=False):
 
         col1, col2 = st.columns(2)
 
-        customers = ["All"] + sorted(df[cust_col].astype(str).unique())
+        if cust_col:
+    customers = ["All"] + sorted(df[cust_col].astype(str).unique())
+else:
+    st.error("Customer column missing")
+    st.stop()
         sel_c = col1.selectbox("Customer", customers, key=title+"cust")
 
         df_f = df if sel_c == "All" else df[df[cust_col] == sel_c]
@@ -58,15 +62,15 @@ def dashboard(df, title, is_industrial=False):
                 st.markdown("### **📋 Customer Info**")
 
                 st.write(f"**Customer Name:** {row.get(cust_col)}")
-                st.write(f"**Model:** {row.get(find_col(df,'model'))}")
-                st.write(f"**Location:** {row.get(find_col(df,'location'))}")
+                st.write(f"**Model:** {row.get(safe_col(df,'model'))}")
+                st.write(f"**Location:** {row.get(safe_col(df,'location'))}")
 
-                st.write(f"**Warranty Type:** {row.get(find_col(df,'warranty'))}")
-                st.write(f"**Warranty Start:** {fmt(row.get(find_col(df,'start')))}")
-                st.write(f"**Warranty End:** {fmt(row.get(find_col(df,'end')))}")
+                st.write(f"**Warranty Type:** {row.get(safe_col(df,'warranty'))}")
+                st.write(f"**Warranty Start:** {fmt(row.get(safe_col(df,'start')))}")
+                st.write(f"**Warranty End:** {fmt(row.get(safe_col(df,'end')))}")
 
-                st.write(f"**Avg Run Hrs:** {row.get(find_col(df,'avg'))}")
-                st.write(f"**Running Hrs:** {row.get(find_col(df,'hmr'))}")
+                st.write(f"**Avg Run Hrs:** {row.get(safe_col(df,'avg'))}")
+                st.write(f"**Running Hrs:** {row.get(safe_col(df,'hmr'))}")
 
             # ==============================
             # 🔧 COLUMN 2 - REPLACEMENT
@@ -108,9 +112,9 @@ def dashboard(df, title, is_industrial=False):
 
                 else:
                     # LIVE FORMULA
-                    last_hmr = row.get(find_col(df,"last"))
-                    avg = row.get(find_col(df,"avg"))
-                    curr = row.get(find_col(df,"hmr"))
+                    last_hmr = row.get(safe_col(df,"last"))
+                    avg = row.get(safe_col(df,"avg"))
+                    curr = row.get(safe_col(df,"hmr"))
 
                     try:
                         live = int(curr - (last_hmr or 0))
@@ -140,7 +144,7 @@ def dashboard(df, title, is_industrial=False):
             # ==============================
             # 🎁 FOC
             # ==============================
-            foc_col = find_col(foc_df, "fabrication")
+            foc_col = safe_col(foc_df, "fabrication")
             if foc_col:
                 foc_data = foc_df[foc_df[foc_col].astype(str) == sel_f]
                 st.subheader("🎁 FOC Details")
@@ -149,7 +153,7 @@ def dashboard(df, title, is_industrial=False):
             # ==============================
             # 🕒 SERVICE
             # ==============================
-            serv_col = find_col(service_df, "fabrication")
+            serv_col = safe_col(service_df, "fabrication")
             if serv_col:
                 serv_data = service_df[service_df[serv_col].astype(str) == sel_f]
                 st.subheader("🕒 Service History")
@@ -166,7 +170,7 @@ def dashboard(df, title, is_industrial=False):
     # ⏳ SERVICE PENDING
     # ==============================
     with tab3:
-        over_col = find_col(df, "over")
+        over_col = safe_col(df, "over")
         if over_col:
             pending = df[df[over_col] != 0]
             st.write(f"Pending Count: {len(pending)}")
