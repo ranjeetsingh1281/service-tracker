@@ -108,14 +108,14 @@ def dashboard(df, title):
             st.sidebar.write(f"{k}: {v}")
 
     # ==============================
-    # TRACKER
+    # TABS
     # ==============================
     tab1, tab2, tab3 = st.tabs(["Machine Tracker", "FOC List", "Service Pending"])
 
     with tab1:
 
         if not cust_col or not fab_col:
-            st.error("Missing required columns")
+            st.error("Required columns missing")
             return
 
         col1, col2 = st.columns(2)
@@ -132,36 +132,45 @@ def dashboard(df, title):
 
             row = df_f[df_f[fab_col].astype(str) == sel_f].iloc[0]
 
-            # ==============================
-            # 4 COLUMNS (SAFE BLOCK)
-            # ==============================
             c1, c2, c3, c4 = st.columns(4)
 
+            # ==============================
             # COLUMN 1
+            # ==============================
             with c1:
-                st.markdown("### **Customer Info**")
-                st.write(f"Customer: {row.get(cust_col)}")
-                st.write(f"Model: {row.get(next((c for c in df.columns if 'model' in c.lower()), None))}")
-                st.write(f"Location: {row.get(next((c for c in df.columns if 'location' in c.lower()), None))}")
-                st.write(f"Running Hrs: {row.get(next((c for c in df.columns if 'hmr' in c.lower()), None))}")
+                st.markdown("### **📋 Customer Info**")
+                st.write(f"**Customer:** {row.get(cust_col)}")
+                st.write(f"**Model:** {row.get(next((c for c in df.columns if 'model' in c.lower()), None))}")
+                st.write(f"**Location:** {row.get(next((c for c in df.columns if 'location' in c.lower()), None))}")
+                st.write(f"**Running Hrs:** {row.get(next((c for c in df.columns if 'hmr' in c.lower()), None))}")
 
+            # ==============================
             # COLUMN 2
+            # ==============================
             with c2:
-                st.markdown("### **Replacement Dates**")
+                st.markdown("### **🔧 Replacement Dates**")
 
-                rep_cols = [
-                    "Oil R-Date","AFC R-Date","AFE R-Date","MOF R-Date",
-                    "ROF R-Date","AOS R-Date","Greasing R-Date",
-                    "1500 Kit R-Date","3000 Kit R-Date"
-                ]
+                rep_map = {
+                    "Oil": "oil r-date",
+                    "AFC": "afc r-date",
+                    "AFE": "afe r-date",
+                    "MOF": "mof r-date",
+                    "ROF": "rof r-date",
+                    "AOS": "aos r-date",
+                    "RGT": "greasing r-date",
+                    "1500K": "1500 kit r-date",
+                    "3000K": "3000 kit r-date"
+                }
 
-                for col_name in rep_cols:
-                    col = next((c for c in df.columns if col_name in c), None)
-                    st.write(f"{col_name}: {fmt(row.get(col)) if col else 'N/A'}")
+                for part, keyword in rep_map.items():
+                    col = next((c for c in df.columns if keyword in c.lower()), None)
+                    st.write(f"**{part}:** {fmt(row.get(col)) if col else 'N/A'}")
 
+            # ==============================
             # COLUMN 3 (FINAL FIXED)
+            # ==============================
             with c3:
-                st.markdown("### **Remaining Hours (Live)**")
+                st.markdown("### **⚙️ Remaining Hours (Live)**")
 
                 try:
                     last_hmr = float(row.get(next((c for c in df.columns if "last call hmr" in c.lower()), None)) or 0)
@@ -171,32 +180,62 @@ def dashboard(df, title):
                     days = (pd.Timestamp.today() - last_date).days
                     live_hmr = int(last_hmr + (days * avg))
 
-                    st.write(f"Live HMR: {live_hmr}")
+                    st.write(f"**Live HMR:** {live_hmr}")
 
                 except:
                     st.write("Live HMR: N/A")
+                    live_hmr = 0
 
+                rem_map = {
+                    "Oil": "oil remaining",
+                    "AFC": "compressor remaining",
+                    "AFE": "engine remaining",
+                    "MOF": "main oil filter remaining",
+                    "ROF": "return oil filter remaining",
+                    "AOS": "separator remaining",
+                    "RGT": "greasing remaining",
+                    "1500K": "1500 kit remaining",
+                    "3000K": "3000 kit remaining"
+                }
+
+                for part, keyword in rem_map.items():
+                    col = next((c for c in df.columns if keyword in c.lower()), None)
+
+                    if col and pd.notna(row[col]):
+                        remaining = int(float(row[col]) - live_hmr)
+
+                        if remaining > 0:
+                            st.write(f"**{part}:** 🟢 {remaining} Hrs")
+                        elif remaining > -50:
+                            st.write(f"**{part}:** 🟡 {remaining} Hrs")
+                        else:
+                            st.write(f"**{part}:** 🔴 {remaining} Hrs")
+                    else:
+                        st.write(f"**{part}:** N/A")
+
+            # ==============================
             # COLUMN 4
+            # ==============================
             with c4:
-                st.markdown("### **Due Dates**")
+                st.markdown("### **🚨 Due Dates**")
 
-                due_cols = [
-                    "OIL DUE DATE","AFC DUE DATE","AFE DUE DATE","MOF DUE DATE",
-                    "ROF DUE DATE","AOS DUE DATE","RGT DUE DATE",
-                    "1500 KIT DUE DATE","3000 KIT DUE DATE"
-                ]
+                due_keywords = ["due date"]
 
-                for col_name in due_cols:
-                    col = next((c for c in df.columns if col_name in c), None)
-                    st.write(f"{col_name}: {fmt(row.get(col)) if col else 'N/A'}")
+                for col in df.columns:
+                    if any(k in col.lower() for k in due_keywords):
+                        st.write(f"**{col}:** {fmt(row.get(col))}")
 
+            # ==============================
             # FOC
+            # ==============================
             st.subheader("🎁 FOC Details")
             foc_col = next((c for c in foc_df.columns if "fabrication" in c.lower()), None)
             if foc_col:
                 st.dataframe(foc_df[foc_df[foc_col].astype(str) == sel_f])
 
+            # ==============================
             # SERVICE
+            # ==============================
             st.subheader("🕒 Service History")
             serv_col = next((c for c in service_df.columns if "fabrication" in c.lower()), None)
             if serv_col:
