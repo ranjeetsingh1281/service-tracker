@@ -150,6 +150,7 @@ def dashboard(df, title, industrial=False):
                 st.write(f"**Model:** {row.get(safe_col(df,'model'))}")
                 st.write(f"**Location:** {row.get(safe_col(df,'location'))}")
                 st.write(f"**Running Hrs:** {row.get(safe_col(df,'hmr'))}")
+                st.write(f"**Calculated Avg Hrs:** {row.get(safe_col('HMR Cal.')} 👈")
 
             # ==============================
             # COLUMN 2
