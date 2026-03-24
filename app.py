@@ -116,9 +116,15 @@ def run_tracker(df, name, key_suffix):
             m1, m2, m3, m4 = st.columns(4)
             with m1:
                 st.info("📋 Info")
+                st.info("📋 Info")
                 st.write(f"**Cust:** {row[cust_col]}")
-                st.write(f"**Current HMR:** `{row.get('CURRENT HMR', row.get('HMR Cal.', 'N/A'))}`")
-                st.write(f"**MDA Total Hours:** `{row.get('MDA Total Hours', 'N/A')}`")
+                st.write(f"**Avg Running/Day:** {row.get(find_col(df, ['avg', 'running']), 'N/A')}")
+                st.write(f"**Current HMR (BL):** `{row.get('CURRENT HMR', 'N/A')}`")
+                st.write(f"**Load HMR (BM):** `{row.get('CURRENT LOAD HMR', 'N/A')}`")
+                st.write(f"**Unload HMR (BN):** `{row.get('CURRENT UNLOAD HMR', 'N/A')}`")
+                st.write(f"**Difference HMR (BO):** `{row.get('DIFFRENT HMR', 'N/A')}`")
+                st.write(f"**Total Last HMR (DU):** `{row.get('MDA Total Hours', 'N/A')}`")
+                st.write(f"**Last Service Date:** {fmt(row.get(find_col(df, ['last', 'call', 'date'])))}")
                 st.download_button("📄 Export Report", to_excel(pd.DataFrame([row])), f"Report_{sel_f}.xlsx", key=f"ex_{sel_f}")
             
             # Mapping Parts
