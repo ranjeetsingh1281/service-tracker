@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import os
 import smtplib
-import pywhatkit as kit
+import urllib.parse
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
@@ -35,7 +35,7 @@ if "login" not in st.session_state or not st.session_state["login"]:
     st.stop()
 
 # ==============================
-# 📧 AUTOMATION (Email & WhatsApp)
+# 📧 AUTOMATION (Email & Cloud-Safe WhatsApp)
 # ==============================
 def send_email_alert(subject, body):
     sender = "crm@primepower.in" 
@@ -54,15 +54,14 @@ def send_email_alert(subject, body):
         return True
     except: return False
 
-def send_whatsapp_alert(message):
-    try:
-        # Isse WhatsApp Web ke zariye message chala jayega
-        kit.sendwhatmsg_instantly("+917061158953", message, wait_time=15, tab_close=True)
-        return True
-    except: return False
+def get_whatsapp_link(message):
+    # Cloud par automatic nahi bhej sakte, par link generate kar sakte hain
+    phone = "917061158953"
+    msg_encoded = urllib.parse.quote(message)
+    return f"https://wa.me/{phone}?text={msg_encoded}"
 
 # ==============================
-# 🧠 HELPERS
+# 📂 DATA LOADING & HELPERS
 # ==============================
 def fmt(dt):
     if pd.isna(dt) or dt == 0: return "N/A"
@@ -81,9 +80,6 @@ def to_excel(df):
         df.to_excel(writer, index=False)
     return output.getvalue()
 
-# ==============================
-# 📂 DATA LOADING
-# ==============================
 @st.cache_data
 def load():
     files = os.listdir('.')
@@ -130,13 +126,15 @@ def run_tracker(df, name, key_suffix):
         if not critical.empty:
             st.error(f"⚠️ {len(critical)} Machines are OVERDUE!")
             c1, c2 = st.columns(2)
-            if c1.button(f"📧 Send Email Alert ({key_suffix})"):
+            if c1.button(f"📧 Email Admin ({key_suffix})"):
                 msg = f"ELGi Alert: {len(critical)} machines are overdue in {name} Tracker."
                 if send_email_alert(f"CRITICAL: {name} Alert", msg): st.success("Email Sent!")
-            if c2.button(f"📱 Send WhatsApp Alert ({key_suffix})"):
-                send_whatsapp_alert(f"ELGi Global: {len(critical)} machines are RED in {name}.")
+            
+            # Cloud Safe WhatsApp
+            wa_msg = f"ELGi Global: {len(critical)} machines are RED in {name}."
+            c2.markdown(f'''<a href="{get_whatsapp_link(wa_msg)}" target="_blank"><button style="width:100%; border-radius:5px; background-color:#25D366; color:white; border:none; padding:10px;">📱 Open WhatsApp Alert</button></a>''', unsafe_allow_html=True)
 
-    # 🔍 MACHINE SEARCH & LIVE HMR
+    # 🔍 SEARCH & LIVE HMR
     st.divider()
     col1, col2 = st.columns(2)
     sel_c = col1.selectbox("Select Customer", ["All"] + sorted(df[cust_col].astype(str).unique()), key=f"c_{key_suffix}")
@@ -152,12 +150,11 @@ def run_tracker(df, name, key_suffix):
             live_hmr = int(last_h + (max(0, (pd.Timestamp.today() - l_date).days) * avg))
         except: live_hmr = int(row.get(find_col(df, ["hmr", "cal"]), 0))
 
-        st.success(f"Live Report for: {sel_f}")
         m1, m2, m3, m4 = st.columns(4)
         with m1:
             st.info("📋 Info")
             st.write(f"**Cust:** {row[cust_col]}\n**Live HMR:** `{live_hmr}`")
-            st.download_button("📄 Export", to_excel(pd.DataFrame([row])), f"Report_{sel_f}.xlsx")
+            st.download_button("📄 Export Report", to_excel(pd.DataFrame([row])), f"Report_{sel_f}.xlsx")
         with m2:
             st.info("🔧 History")
             for p in ["oil","afc","afe","mof","rof","aos","rgt","1500","3000"]:
@@ -187,5 +184,4 @@ elif nav == "INDUSTRIAL Tracker":
 elif nav == "📢 Automation Center":
     st.header("📢 Manual Broadcast")
     msg = st.text_area("Message:", "Daily Update: All machines are healthy.")
-    if st.button("Send WhatsApp to +917061158953"):
-        send_whatsapp_alert(msg)
+    st.markdown(f'''<a href="{get_whatsapp_link(msg)}" target="_blank"><button style="border-radius:5px; background-color:#25D366; color:white; border:none; padding:10px;">📱 Send WhatsApp to Admin</button></a>''', unsafe_allow_html=True)
