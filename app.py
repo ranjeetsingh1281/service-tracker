@@ -6,7 +6,7 @@ from datetime import datetime
 from io import BytesIO
 
 # ==============================
-# 🔐 ROLE-BASED LOGIN SYSTEM
+# 🔐 LOGIN SYSTEM
 # ==============================
 USER_DB = {
     "admin": {"pass": "admin123", "role": "all"},
@@ -20,9 +20,7 @@ def login():
     p = st.text_input("Password", type="password")
     if st.button("Login"):
         if u in USER_DB and USER_DB[u]["pass"] == p:
-            st.session_state["login"] = True
-            st.session_state["user"] = u
-            st.session_state["role"] = USER_DB[u]["role"]
+            st.session_state["login"], st.session_state["user"], st.session_state["role"] = True, u, USER_DB[u]["role"]
             st.rerun()
         else: st.error("Invalid Credentials")
 
@@ -70,24 +68,20 @@ def load():
 master_df, master_od_df, foc_df, service_df = load()
 
 # ==============================
-# 🏢 NAVIGATION & SIDEBAR
+# 🏢 SIDEBAR STATS
 # ==============================
-role = st.session_state["role"]
-st.sidebar.title(f"👋 {st.session_state['user'].upper()}")
-
-if role == "all":
-    nav = st.sidebar.radio("Navigation:", ["DPSAC Tracker", "INDUSTRIAL Tracker", "📢 Automation Center"])
-elif role == "dpsac": nav = "DPSAC Tracker"
-else: nav = "INDUSTRIAL Tracker"
+role, user = st.session_state["role"], st.session_state["user"]
+st.sidebar.title(f"👋 {user.upper()}")
+nav = st.sidebar.radio("Navigation:", ["DPSAC Tracker", "INDUSTRIAL Tracker", "📢 Automation Center"]) if role == "all" else (nav := "DPSAC Tracker" if role == "dpsac" else "INDUSTRIAL Tracker")
 
 active_v_df = master_df if nav == "DPSAC Tracker" else master_od_df
 if not active_v_df.empty and nav != "📢 Automation Center":
+    st.sidebar.markdown("---")
     scol = find_col(active_v_df, ["unit", "status"])
     if scol:
-        st.sidebar.markdown("### 📋 Unit Status Counts")
+        st.sidebar.markdown("### 📋 Unit Status")
         for s in ["Active", "Shifted", "Sold"]:
-            c_v = len(active_v_df[active_v_df[scol].astype(str).str.contains(s, case=False, na=False)])
-            st.sidebar.write(f"**{s}:** {c_v}")
+            st.sidebar.write(f"**{s}:** {len(active_v_df[active_v_df[scol].astype(str).str.contains(s, case=False, na=False)])}")
     catcol = find_col(active_v_df, ["category"])
     if catcol:
         st.sidebar.markdown("### 📦 Category Breakdown")
@@ -97,22 +91,18 @@ if st.sidebar.button("Logout"):
     st.session_state["login"] = False; st.rerun()
 
 # ==============================
-# 💎 TRACKER ENGINE
+# 💎 MAIN TRACKER ENGINE
 # ==============================
 def run_tracker(df, name, key_suffix):
     st.title(f"🛠️ {name} Tracker Pro")
     
-    # 📊 GRAPHS SECTION
-    with st.expander("📊 Click to View Dashboard Analytics & Graphs", expanded=False):
+    # Graphs
+    with st.expander("📊 Click to View Dashboard Analytics", expanded=False):
         c1, c2 = st.columns(2)
         sc = find_col(df, ["unit", "status"])
-        if sc: 
-            c1.subheader("Unit Status Distribution")
-            c1.bar_chart(df[sc].value_counts())
+        if sc: c1.bar_chart(df[sc].value_counts())
         cc = find_col(df, ["category"])
-        if cc: 
-            c2.subheader("Category Breakdown")
-            c2.bar_chart(df[cc].value_counts())
+        if cc: c2.bar_chart(df[cc].value_counts())
 
     overdue_col = find_col(df, ["over", "due"]) or find_col(df, ["red", "count"])
     if overdue_col:
@@ -122,7 +112,6 @@ def run_tracker(df, name, key_suffix):
             st.download_button(f"📥 Export Pending List", to_excel(crit), f"{name}_Pending.xlsx", key=f"p_{key_suffix}")
 
     t1, t2, t3 = st.tabs(["Machine Tracker", "📦 FOC List", "⏳ Service Pending"])
-    
     with t1:
         colA, colB = st.columns(2)
         cust_col, fab_col = find_col(df, ["customer"]), find_col(df, ["fabrication"])
@@ -132,37 +121,34 @@ def run_tracker(df, name, key_suffix):
 
         if sel_f != "Select":
             row = df_f[df_f[fab_col].astype(str) == sel_f].iloc[0]
-            
-            # --- 📊 INFO BOX ---
             m1, m2, m3, m4 = st.columns(4)
             with m1:
                 st.info("📋 Info")
                 st.write(f"**Cust:** {row[cust_col]}")
-                st.write(f"**Avg Running/Day:** {row.get(find_col(df, ['avg', 'running']), 'N/A')}")
-                st.write(f"**Current HMR (BL):** `{row.get('CURRENT HMR', 'N/A')}`")
+                st.write(f"**Current HMR:** `{row.get('CURRENT HMR', row.get('HMR Cal.', 'N/A'))}`")
                 st.write(f"**Load HMR (BM):** `{row.get('CURRENT LOAD HMR', 'N/A')}`")
                 st.write(f"**Unload HMR (BN):** `{row.get('CURRENT UNLOAD HMR', 'N/A')}`")
                 st.write(f"**Difference HMR (BO):** `{row.get('DIFFRENT HMR', 'N/A')}`")
-                st.write(f"**Total Last HMR (DU):** `{row.get('MDA Total Hours', 'N/A')}`")
-                st.write(f"**Last Service Date:** {fmt(row.get(find_col(df, ['last', 'call', 'date'])))}")
-                st.download_button("📄 Export Machine Data", to_excel(pd.DataFrame([row])), f"Report_{sel_f}.xlsx", key=f"ex_{sel_f}")
+                st.write(f"**Total Hours (DU):** `{row.get('MDA Total Hours', 'N/A')}`")
+                st.write(f"**Last Call Date:** {fmt(row.get(find_col(df, ['last', 'call', 'date'])))}")
+                st.download_button("📄 Export Report", to_excel(pd.DataFrame([row])), f"Report_{sel_f}.xlsx", key=f"ex_{sel_f}")
             
-            # --- 🔧 DUAL-ENGINE 9 PARTS MAPPING ---
+            # 9-Parts Mapping (Dual Engine)
             if name == "INDUSTRIAL":
                 pm = {"OIL":["oil","r","date"],"AF":["af","r","date"],"OF":["of","r","date"],"AOS":["aos","r","date"],"RGT":["rgt","r","date"],"VK":["valvekit","r","date"],"PF":["pf","due"],"FF":["ff","due"],"CF":["cf","due"]}
-            else: # DPSAC Tracker Mapping
+            else:
                 pm = {"OIL":["oil","repl"],"AFC":["afc","repl"],"AFE":["afe","repl"],"MOF":["mof","repl"],"ROF":["rof","repl"],"AOS":["aos","repl"],"RGT":["rgt","repl"],"1500":["1500","repl"],"3000":["3000","repl"]}
 
             with m2:
                 st.info("🔧 History (R Date)")
                 for lbl, ks in pm.items():
                     c = next((x for x in df.columns if all(k in x.lower() for k in ks)), None)
-                    if not c: c = next((x for x in df.columns if lbl.lower() in x.lower() and "replaced" in x.lower() and "date" in x.lower()), None)
+                    if not c: c = next((x for x in df.columns if lbl.lower() in x.lower() and "replaced" in x.lower()), None)
                     st.write(f"**{lbl}:** {fmt(row.get(c))}")
             with m3:
                 st.info("⏳ Remaining (HMR)")
                 for lbl, ks in pm.items():
-                    rc = next((x for x in df.columns if lbl.lower() in x.lower() and "rem" in x.lower() and "hmr" in x.lower()), None)
+                    rc = next((x for x in df.columns if lbl.lower() in x.lower() and ("rem" in x.lower() or "remaining" in x.lower())), None)
                     val = row.get(rc, "N/A")
                     icon = '🟢' if pd.notna(val) and str(val).replace('.','').replace('-','').isdigit() and float(val)>100 else '🔴'
                     st.write(f"**{lbl}:** {icon} {val}")
@@ -172,21 +158,12 @@ def run_tracker(df, name, key_suffix):
                     dc = next((x for x in df.columns if lbl.lower() in x.lower() and "due" in x.lower() and "date" in x.lower()), None)
                     st.write(f"**{lbl}:** {fmt(row.get(dc))}")
 
-            st.divider()
-            h1, h2 = st.tabs(["🎁 FOC Details", "🕒 Service History"])
-            with h1:
-                f_c = find_col(foc_df, ["fabrication"])
-                if f_c: st.dataframe(foc_df[foc_df[f_c].astype(str) == sel_f], use_container_width=True)
-            with h2:
-                s_c = find_col(service_df, ["fabrication"])
-                if s_c: st.dataframe(service_df[service_df[s_c].astype(str) == sel_f], use_container_width=True)
-
 # ==============================
 # 📢 AUTOMATION CENTER
 # ==============================
 if nav == "📢 Automation Center":
     st.title("📢 Automation Center")
-    msg = st.text_area("Broadcast Message:", "Daily Report Update: Check Dashboard for Overdue status.")
+    msg = st.text_area("Broadcast Message:", "Report: Overdue status alert.")
     wa_link = f"https://wa.me/917061158953?text={urllib.parse.quote(msg)}"
     st.markdown(f'<a href="{wa_link}" target="_blank"><button style="background-color:#25D366; color:white; padding:10px; border:none; border-radius:5px; cursor:pointer;">📱 Send WhatsApp Alert</button></a>', unsafe_allow_html=True)
 
