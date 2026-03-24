@@ -6,7 +6,7 @@ from datetime import datetime
 from io import BytesIO
 
 # ==============================
-# 🔐 ROLE-BASED LOGIN
+# 🔐 ROLE-BASED LOGIN SYSTEM
 # ==============================
 USER_DB = {
     "admin": {"pass": "admin123", "role": "all"},
@@ -61,10 +61,12 @@ def to_excel(df):
 def load():
     f_list = os.listdir('.')
     def f(name): return next((x for x in f_list if name.lower() in x.lower() and x.endswith('.xlsx')), None)
+    
     m_df = pd.read_excel(f("Master_Data"), engine='openpyxl') if f("Master_Data") else pd.DataFrame()
     m_od_df = pd.read_excel(f("Master_OD_Data"), engine='openpyxl') if f("Master_OD_Data") else pd.DataFrame()
     foc_df = pd.read_excel(f("Active_FOC"), engine='openpyxl') if f("Active_FOC") else pd.DataFrame()
     srv_df = pd.read_excel(f("Service_Details"), engine='openpyxl') if f("Service_Details") else pd.DataFrame()
+    
     for d in [m_df, m_od_df, foc_df, srv_df]:
         if not d.empty: d.columns = [str(c).strip() for c in d.columns]
     return m_df, m_od_df, foc_df, srv_df
@@ -81,7 +83,7 @@ if role == "all":
 elif role == "dpsac": nav = "DPSAC Tracker"
 else: nav = "INDUSTRIAL Tracker"
 
-# --- SIDEBAR STATS ---
+# --- SIDEBAR STATUS COUNTS ---
 active_v_df = master_df if nav == "DPSAC Tracker" else master_od_df
 if not active_v_df.empty and nav != "📢 Automation Center":
     scol = find_col(active_v_df, ["unit", "status"])
@@ -90,6 +92,7 @@ if not active_v_df.empty and nav != "📢 Automation Center":
         for s in ["Active", "Shifted", "Sold"]:
             c_val = len(active_v_df[active_v_df[scol].astype(str).str.contains(s, case=False, na=False)])
             st.sidebar.write(f"**{s}:** {c_val}")
+    
     catcol = find_col(active_v_df, ["category"])
     if catcol:
         st.sidebar.markdown("### 📦 Category Breakdown")
@@ -105,7 +108,6 @@ if st.sidebar.button("Logout"):
 def run_tracker(df, name, key_suffix):
     st.title(f"🛠️ {name} Tracker Pro")
     
-    # 🚨 OVERDUE ALERTS
     overdue_col = find_col(df, ["over", "due"]) or find_col(df, ["red", "count"])
     if overdue_col:
         crit_data = df[df[overdue_col] != 0]
@@ -125,57 +127,64 @@ def run_tracker(df, name, key_suffix):
         if sel_f != "Select":
             row = df_f[df_f[fab_col].astype(str) == sel_f].iloc[0]
             
-            # --- CALCULATIONS ---
-            last_h = float(row.get(find_col(df, ["hmr", "cal"]), 0))
-            avg_hrs_day = float(row.get(find_col(df, ["avg", "running"]), 0))
-            last_call_h = float(row.get(find_col(df, ["last", "call", "hmr"]), 0))
-            l_date_val = pd.to_datetime(row.get(find_col(df, ["hmr", "date"])))
-            l_call_date = pd.to_datetime(row.get(find_col(df, ["last", "call", "date"])))
-            
-            days_passed = (pd.Timestamp.today() - l_date_val).days
-            live_hmr = int(last_h + (max(0, days_passed) * avg_hrs_day))
-            since_service = (pd.Timestamp.today() - l_call_date).days if not pd.isna(l_call_date) else 0
+            # --- 📊 CUSTOMER INFO & HMR FIELDS ---
+            # Columns BL (Current), BM (Load), BN (Unload), BO (Diff)
+            avg_run = row.get(find_col(df, ["avg", "running"]), "N/A")
+            curr_hmr = row.get("CURRENT HMR", "N/A") 
+            load_hmr = row.get("CURRENT LOAD HMR", "N/A") 
+            unload_hmr = row.get("CURRENT UNLOAD HMR", "N/A") 
+            diff_hmr = row.get("DIFFRENT HMR", "N/A") 
+            l_call_date = row.get(find_col(df, ["last", "call", "date"]))
 
             m1, m2, m3, m4 = st.columns(4)
-            with m1: # --- CUSTOMER INFO SECTION ---
+            with m1:
                 st.info("📋 Info")
                 st.write(f"**Cust:** {row[cust_col]}")
-                st.write(f"**Live HMR:** `{live_hmr}`")
-                st.write(f"**Avg Running/Day:** {avg_hrs_day} Hrs")
-                st.write(f"**Last Call HMR:** {last_call_h}")
-                st.write(f"**Last Call Date:** {fmt(l_call_date)}")
-                st.write(f"**Since Last Service:** {since_service} Days")
-                st.download_button("📄 Export Machine Data", to_excel(pd.DataFrame([row])), f"Report_{sel_f}.xlsx", key=f"ex_{sel_f}")
+                st.write(f"**Avg Running/Day:** {avg_run}")
+                st.write(f"**Current HMR:** `{curr_hmr}`")
+                st.write(f"**Load HMR:** `{load_hmr}`")
+                st.write(f"**Unload HMR:** `{unload_hmr}`")
+                st.write(f"**Difference HMR:** `{diff_hmr}`")
+                st.write(f"**Last Service:** {fmt(l_call_date)}")
+                st.download_button("📄 Export Report", to_excel(pd.DataFrame([row])), f"Report_{sel_f}.xlsx", key=f"ex_{sel_f}")
             
-            # --- 9 PARTS LOOKUP FIX ---
-            pm = {
-                "OIL": ["oil"], "AF": ["af"], "OF": ["of"], "AOS": ["aos"], 
-                "RGT": ["rgt"], "VK": ["vk", "valve"], "PF": ["pf"], "FF": ["ff"], "CF": ["cf"]
-            } if name == "INDUSTRIAL" else {
-                "OIL": ["oil"], "AFC": ["afc"], "AFE": ["afe"], "MOF": ["mof"], 
-                "ROF": ["rof"], "AOS": ["aos"], "RGT": ["rgt"], "1500": ["1500"], "3000": ["3000"]
-            }
-            
-            with m2: # Replacement History
-                st.info("🔧 History (9 Parts)")
+            # --- 🔧 9 PARTS DIRECT LOOKUP ---
+            if name == "INDUSTRIAL":
+                # Mapping keywords to match "Rem. HMR Till date" columns
+                pm = {
+                    "AF": ["af", "rem", "hmr"], "OF": ["of", "rem", "hmr"], 
+                    "OIL": ["oil", "rem", "hmr"], "AOS": ["aos", "rem", "hmr"], 
+                    "VK": ["vk", "rem", "hmr"], "RGT": ["rgt", "rem", "hmr"],
+                    "PF": ["pf", "due"], "FF": ["ff", "due"], "CF": ["cf", "due"]
+                }
+            else:
+                pm = {"OIL": ["oil"],"AFC": ["afc"],"AFE": ["afe"],"MOF": ["mof"],"ROF": ["rof"],"AOS": ["aos"],"RGT": ["rgt"],"1500": ["1500"],"3000": ["3000"]}
+
+            with m2:
+                st.info("🔧 History (Dates)")
                 for lbl, ks in pm.items():
                     c = next((x for x in df.columns if all(k in x.lower() for k in ks) and "date" in x.lower() and "due" not in x.lower()), None)
+                    if not c: c = next((x for x in df.columns if lbl.lower() in x.lower() and "replaced" in x.lower()), None)
                     st.write(f"**{lbl}:** {fmt(row.get(c))}")
             
-            with m3: # Live Remaining
-                st.info("⏳ Remaining (9 Parts)")
+            with m3:
+                st.info("⏳ Remaining (Direct Lookup)")
                 for lbl, ks in pm.items():
-                    rc = next((x for x in df.columns if all(k in x.lower() for k in ks) and "remaining" in x.lower()), None)
-                    if rc and pd.notna(row[rc]):
-                        act_r = int(float(row[rc]) - (live_hmr - last_h))
-                        icon = "🟢" if act_r > 100 else "🟡" if act_r > 0 else "🔴"
-                        st.write(f"**{lbl}:** {icon} {act_r}")
+                    # Direct lookup from Excel headers: "Rem. HMR Till date"
+                    rc = next((x for x in df.columns if all(k in x.lower() for k in ks) and "rem" in x.lower()), None)
+                    val = row.get(rc, "N/A")
+                    if pd.notna(val) and val != "N/A":
+                        try:
+                            # Color icon based on value
+                            icon = "🟢" if float(val) > 100 else "🔴"
+                            st.write(f"**{lbl}:** {icon} {val}")
+                        except: st.write(f"**{lbl}:** {val}")
                     else: st.write(f"**{lbl}:** N/A")
             
-            with m4: # Next Due Dates
-                st.error("🚨 Next Due (9 Parts)")
+            with m4:
+                st.error("🚨 Next Due")
                 for lbl, ks in pm.items():
-                    dc = next((x for x in df.columns if all(k in x.lower() for k in ks) and "due" in x.lower() and "date" in x.lower()), None)
+                    dc = next((x for x in df.columns if lbl.lower() in x.lower() and "due" in x.lower() and "date" in x.lower()), None)
                     st.write(f"**{lbl}:** {fmt(row.get(dc))}")
 
             st.divider()
@@ -187,14 +196,14 @@ def run_tracker(df, name, key_suffix):
                 s_c = find_col(service_df, ["fabrication"])
                 if s_c: st.dataframe(service_df[service_df[s_c].astype(str) == sel_f], use_container_width=True)
 
-    with t2: # FOC Master List Export
+    with t2:
         st.subheader(f"📦 {name} FOC List")
         f_c = find_col(foc_df, ["fabrication"])
         f_list = foc_df[foc_df[f_c].astype(str).isin(df[fab_col].astype(str))] if not foc_df.empty else pd.DataFrame()
         st.download_button(f"📥 Export FOC List", to_excel(f_list), f"{name}_FOC.xlsx", key=f"f_ex_{key_suffix}")
         st.dataframe(f_list, use_container_width=True)
 
-    with t3: # Service Pending List Export
+    with t3:
         st.subheader(f"⏳ {name} Service Pending")
         st.download_button(f"📥 Export Pending List", to_excel(crit_data), f"{name}_Pending.xlsx", key=f"p_ex_{key_suffix}")
         st.dataframe(crit_data, use_container_width=True)
