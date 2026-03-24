@@ -4,8 +4,4 @@ openpyxl
 reportlab
 xlsxwriter
 plotly
-streamlit
-pandas
-openpyxl
-xlsxwriter
 pywhatkit
