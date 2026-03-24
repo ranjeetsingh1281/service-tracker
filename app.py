@@ -35,7 +35,7 @@ if "login" not in st.session_state or not st.session_state["login"]:
 st.set_page_config(page_title="ELGi Global Tracker Pro", layout="wide")
 
 def fmt(dt):
-    if pd.isna(dt) or dt == 0: return "N/A"
+    if pd.isna(dt) or dt == 0 or str(dt).lower() in ["nan", "nat"]: return "N/A"
     try: return pd.to_datetime(dt).strftime('%d-%b-%y')
     except: return str(dt)
 
@@ -80,20 +80,20 @@ if role == "all":
 elif role == "dpsac": nav = "DPSAC Tracker"
 else: nav = "INDUSTRIAL Tracker"
 
-# --- 📊 SIDEBAR METRICS & COUNTS ---
+# --- 📊 SIDEBAR COUNTS & CATEGORIES ---
 st.sidebar.markdown("---")
 active_df = master_df if nav == "DPSAC Tracker" else master_od_df
 if not active_df.empty:
     s_col = find_col(active_df, ["unit", "status"])
     if s_col:
-        st.sidebar.markdown("### 📋 Unit Counts")
-        st.sidebar.write(f"🟢 **Active:** {len(active_df[active_df[s_col].astype(str).str.contains('Active', case=False, na=False)])}")
-        st.sidebar.write(f"🔵 **Shifted:** {len(active_df[active_df[s_col].astype(str).str.contains('Shifted', case=False, na=False)])}")
-        st.sidebar.write(f"🟠 **Sold:** {len(active_df[active_df[s_col].astype(str).str.contains('Sold', case=False, na=False)])}")
+        st.sidebar.markdown("### 📋 Unit Status Counts")
+        for s in ["Active", "Shifted", "Sold"]:
+            count = len(active_df[active_df[s_col].astype(str).str.contains(s, case=False, na=False)])
+            st.sidebar.write(f"**{s}:** {count}")
     
     cat_col = find_col(active_df, ["category"])
     if cat_col:
-        st.sidebar.markdown("### 📦 Category Counts")
+        st.sidebar.markdown("### 📦 Category Breakdown")
         for k, v in active_df[cat_col].value_counts().items():
             st.sidebar.write(f"**{k}:** {v}")
 
@@ -101,32 +101,28 @@ if st.sidebar.button("Logout"):
     st.session_state["login"] = False; st.rerun()
 
 # ==============================
-# 💎 TRACKER CORE ENGINE
+# 💎 TRACKER ENGINE
 # ==============================
 def run_tracker(df, name, key_suffix):
     st.title(f"🛠️ {name} Tracker Pro")
     
-    # 1. Dashboard Analytics (Charts)
-    with st.expander("📊 Click to View Dashboard Analytics & Graphs", expanded=False):
+    # Graphs & Charts
+    with st.expander("📊 Dashboard Analytics & Graphs", expanded=False):
         c1, c2 = st.columns(2)
-        s_col = find_col(df, ["unit", "status"])
-        if s_col:
-            c1.subheader("Unit Status Distribution")
-            c1.bar_chart(df[s_col].value_counts())
-        cat_col = find_col(df, ["category"])
-        if cat_col:
-            c2.subheader("Category Distribution")
-            c2.bar_chart(df[cat_col].value_counts())
+        sc = find_col(df, ["unit", "status"])
+        if sc: c1.bar_chart(df[sc].value_counts())
+        cc = find_col(df, ["category"])
+        if cc: c2.bar_chart(df[cc].value_counts())
 
-    # 2. Overdue Alerts
+    # Alerts
     overdue_col = find_col(df, ["over", "due"]) or find_col(df, ["red", "count"])
     if overdue_col:
         critical = df[df[overdue_col] != 0]
         if not critical.empty:
             st.error(f"⚠️ {len(critical)} Machines are OVERDUE!")
-            st.download_button(f"📥 Export Overdue List (Excel)", to_excel(critical), f"Critical_{key_suffix}.xlsx")
+            st.download_button(f"📥 Export Pending List", to_excel(critical), f"{name}_Pending.xlsx")
 
-    # 3. Machine Tracker Tabs
+    # Tabs
     t1, t2, t3 = st.tabs(["Machine Tracker", "📦 FOC List", "⏳ Service Pending"])
     
     with t1:
@@ -151,48 +147,53 @@ def run_tracker(df, name, key_suffix):
                 st.write(f"**Cust:** {row[cust_col]}\n**HMR Live:** `{live_hmr}`")
                 st.download_button("📄 Export Report", to_excel(pd.DataFrame([row])), f"Report_{sel_f}.xlsx")
             
-            with m2: # 9 Parts Restoration
+            # Master Parts List (Synchronized for all sections)
+            parts = ["oil","afc","afe","mof","rof","aos","rgt","1500","3000"] if name == "DPSAC" else ["oil","af","of","aos","rgt","vk","pf","ff","cf"]
+            
+            with m2:
                 st.info("🔧 History (9 Parts)")
-                parts = ["oil","afc","afe","mof","rof","aos","rgt","1500","3000"] if name == "DPSAC" else ["oil","af","of","aos","rgt","vk","pf","ff","cf"]
                 for p in parts:
                     col = next((c for c in df.columns if p in c.lower() and "date" in c.lower() and "due" not in c.lower()), None)
                     st.write(f"**{p.upper()}:** {fmt(row.get(col))}")
             
             with m3:
-                st.info("⏳ Remaining")
+                st.info("⏳ Remaining (9 Parts)")
                 for p in parts:
+                    # Searching for remaining columns dynamically
                     rem_c = next((c for c in df.columns if p in c.lower() and "remaining" in c.lower()), None)
                     if rem_c and pd.notna(row[rem_c]):
+                        # Adjusting remaining based on live HMR delta
                         act_rem = int(float(row[rem_c]) - (live_hmr - last_h))
                         icon = "🟢" if act_rem > 100 else "🟡" if act_rem > 0 else "🔴"
                         st.write(f"**{p.upper()}:** {icon} {act_rem}")
+                    else:
+                        st.write(f"**{p.upper()}:** N/A")
             
             with m4:
-                st.error("🚨 Next Due")
+                st.error("🚨 Next Due (9 Parts)")
                 for p in parts:
                     due_c = next((c for c in df.columns if p in c.lower() and "due" in c.lower() and "date" in c.lower()), None)
                     if due_c: st.write(f"**{p.upper()}:** {fmt(row.get(due_c))}")
 
-            # Machine History
             st.divider()
             h1, h2 = st.tabs(["🎁 FOC Details", "🕒 Service History"])
             with h1:
-                f_col = find_col(foc_df, ["fabrication"])
-                if f_col: st.dataframe(foc_df[foc_df[f_col].astype(str) == sel_f], use_container_width=True)
+                f_c = find_col(foc_df, ["fabrication"])
+                if f_c: st.dataframe(foc_df[foc_df[f_c].astype(str) == sel_f], use_container_width=True)
             with h2:
-                s_col = find_col(service_df, ["fabrication"])
-                if s_col: st.dataframe(service_df[service_df[s_col].astype(str) == sel_f], use_container_width=True)
+                s_c = find_col(service_df, ["fabrication"])
+                if s_c: st.dataframe(service_df[service_df[s_c].astype(str) == sel_f], use_container_width=True)
 
-    with t2: # 3. FOC List Export
-        st.subheader(f"📦 {name} Complete FOC List")
-        fabs = df[fab_col].astype(str).unique()
-        f_list = foc_df[foc_df[find_col(foc_df, ["fabrication"])].astype(str).isin(fabs)] if not foc_df.empty else pd.DataFrame()
-        st.download_button(f"📥 Download {name} FOC Excel", to_excel(f_list), f"{name}_FOC.xlsx")
+    with t2:
+        st.subheader(f"📦 {name} FOC List")
+        f_c = find_col(foc_df, ["fabrication"])
+        f_list = foc_df[foc_df[f_c].astype(str).isin(df[fab_col].astype(str))] if not foc_df.empty else pd.DataFrame()
+        st.download_button(f"📥 Export FOC List", to_excel(f_list), f"{name}_FOC.xlsx")
         st.dataframe(f_list, use_container_width=True)
 
-    with t3: # 4. Service Pending List Export
-        st.subheader(f"⏳ {name} Service Pending (Overdue)")
-        st.download_button(f"📥 Download {name} Pending Excel", to_excel(critical), f"{name}_Pending.xlsx")
+    with t3:
+        st.subheader(f"⏳ {name} Service Pending")
+        st.download_button(f"📥 Export Pending List", to_excel(critical), f"{name}_Pending.xlsx")
         st.dataframe(critical, use_container_width=True)
 
 # --- EXECUTION ---
