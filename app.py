@@ -85,7 +85,19 @@ if st.sidebar.button("Logout"):
 # ==============================
 def run_tracker(df, name, key_suffix):
     st.title(f"🛠️ {name} Tracker Pro")
-    
+
+    # 📊 GRAPHS SECTION
+    with st.expander("📊 Click to View Dashboard Analytics & Graphs", expanded=False):
+        c1, c2 = st.columns(2)
+        sc = find_col(df, ["unit", "status"])
+        if sc: 
+            c1.subheader("Unit Status Distribution")
+            c1.bar_chart(df[sc].value_counts())
+        cc = find_col(df, ["category"])
+        if cc: 
+            c2.subheader("Category Breakdown")
+            c2.bar_chart(df[cc].value_counts())
+            
     # Identify Overdue first
     overdue_col = find_col(df, ["over", "due"]) or find_col(df, ["red", "count"])
     crit = df[df[overdue_col] != 0] if overdue_col else pd.DataFrame()
