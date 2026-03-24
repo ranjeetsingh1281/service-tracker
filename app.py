@@ -36,7 +36,6 @@ st.set_page_config(page_title="ELGi Global Tracker Pro", layout="wide")
 
 def fmt(dt):
     if pd.isna(dt) or dt == 0 or str(dt).lower() in ["nan", "nat"]: return "N/A"
-    # Handling the 01-Jan-70 issue (Unix epoch start)
     try:
         val = pd.to_datetime(dt)
         if val.year <= 1970: return "N/A"
@@ -75,7 +74,7 @@ def load():
 master_df, master_od_df, foc_df, service_df = load()
 
 # ==============================
-# 🏢 NAVIGATION (RBAC)
+# 🏢 NAVIGATION
 # ==============================
 role = st.session_state["role"]
 st.sidebar.title(f"👋 {st.session_state['user'].upper()}")
@@ -84,21 +83,20 @@ if role == "all":
 elif role == "dpsac": nav = "DPSAC Tracker"
 else: nav = "INDUSTRIAL Tracker"
 
-# Sidebar Stats
-st.sidebar.markdown("---")
-active_df = master_df if nav == "DPSAC Tracker" else master_od_df
-if not active_df.empty:
-    s_col = find_col(active_df, ["unit", "status"])
+# Sidebar Stats logic (Shared)
+active_view_df = master_df if nav == "DPSAC Tracker" else master_od_df
+if not active_view_df.empty and nav != "📢 Automation Center":
+    s_col = find_col(active_view_df, ["unit", "status"])
     if s_col:
         st.sidebar.markdown("### 📋 Unit Status Counts")
         for s in ["Active", "Shifted", "Sold"]:
-            c = len(active_df[active_df[s_col].astype(str).str.contains(s, case=False, na=False)])
-            st.sidebar.write(f"**{s}:** {c}")
+            c_val = len(active_view_df[active_view_df[s_col].astype(str).str.contains(s, case=False, na=False)])
+            st.sidebar.write(f"**{s}:** {c_val}")
     
-    cat_col = find_col(active_df, ["category"])
+    cat_col = find_col(active_view_df, ["category"])
     if cat_col:
         st.sidebar.markdown("### 📦 Category Breakdown")
-        for k, v in active_df[cat_col].value_counts().items():
+        for k, v in active_view_df[cat_col].value_counts().items():
             st.sidebar.write(f"**{k}:** {v}")
 
 if st.sidebar.button("Logout"):
@@ -110,21 +108,34 @@ if st.sidebar.button("Logout"):
 def run_tracker(df, name, key_suffix):
     st.title(f"🛠️ {name} Tracker Pro")
     
+    # Dashboard Analytics
+    with st.expander("📊 Dashboard Analytics & Graphs", expanded=False):
+        c1, c2 = st.columns(2)
+        sc = find_col(df, ["unit", "status"])
+        if sc: c1.bar_chart(df[sc].value_counts())
+        cc = find_col(df, ["category"])
+        if cc: c2.bar_chart(df[cc].value_counts())
+
+    # Alert section with UNIQUE KEY fix
     overdue_col = find_col(df, ["over", "due"]) or find_col(df, ["red", "count"])
     if overdue_col:
-        critical = df[df[overdue_col] != 0]
-        if not critical.empty:
-            st.error(f"⚠️ {len(critical)} Machines are OVERDUE!")
-            st.download_button(f"📥 Export Pending List", to_excel(critical), f"{name}_Pending.xlsx")
+        critical_data = df[df[overdue_col] != 0]
+        if not critical_data.empty:
+            st.error(f"⚠️ {len(critical_data)} Machines are OVERDUE!")
+            # Added unique key here to prevent DuplicateElementId error
+            st.download_button(label=f"📥 Export Pending List ({name})", 
+                             data=to_excel(critical_data), 
+                             file_name=f"{name}_Pending.xlsx",
+                             key=f"dl_pending_{key_suffix}")
 
     t1, t2, t3 = st.tabs(["Machine Tracker", "📦 FOC List", "⏳ Service Pending"])
     
     with t1:
         colA, colB = st.columns(2)
         cust_col, fab_col = find_col(df, ["customer"]), find_col(df, ["fabrication"])
-        sel_c = colA.selectbox("Select Customer", ["All"] + sorted(df[cust_col].astype(str).unique()), key=f"c_{key_suffix}")
+        sel_c = colA.selectbox(f"Select Customer ({name})", ["All"] + sorted(df[cust_col].astype(str).unique()), key=f"sel_c_{key_suffix}")
         df_f = df if sel_c == "All" else df[df[cust_col] == sel_c]
-        sel_f = colB.selectbox("Select Fabrication", ["Select"] + sorted(df_f[fab_col].astype(str).unique()), key=f"f_{key_suffix}")
+        sel_f = colB.selectbox(f"Select Fabrication ({name})", ["Select"] + sorted(df_f[fab_col].astype(str).unique()), key=f"sel_f_{key_suffix}")
 
         if sel_f != "Select":
             row = df_f[df_f[fab_col].astype(str) == sel_f].iloc[0]
@@ -139,9 +150,8 @@ def run_tracker(df, name, key_suffix):
             with m1:
                 st.info("📋 Info")
                 st.write(f"**Cust:** {row[cust_col]}\n**HMR Live:** `{live_hmr}`")
-                st.download_button("📄 Export Report", to_excel(pd.DataFrame([row])), f"Report_{sel_f}.xlsx")
+                st.download_button("📄 Export Report", to_excel(pd.DataFrame([row])), f"Report_{sel_f}.xlsx", key=f"dl_rep_{sel_f}")
             
-            # --- VK FIX: Keyword mapping for robust lookup ---
             parts_map = {
                 "OIL": ["oil"], "AFC": ["afc"], "AFE": ["afe"], "MOF": ["mof"], 
                 "ROF": ["rof"], "AOS": ["aos"], "RGT": ["rgt"], "1500": ["1500"], "3000": ["3000"]
@@ -173,6 +183,7 @@ def run_tracker(df, name, key_suffix):
                     st.write(f"**{label}:** {fmt(row.get(due_c))}")
 
             st.divider()
+            st.subheader("🎁 Transactional Details")
             h1, h2 = st.tabs(["🎁 FOC Details", "🕒 Service History"])
             with h1:
                 f_c = find_col(foc_df, ["fabrication"])
@@ -182,16 +193,42 @@ def run_tracker(df, name, key_suffix):
                 if s_c: st.dataframe(service_df[service_df[s_c].astype(str) == sel_f], use_container_width=True)
 
     with t2:
-        st.subheader(f"📦 {name} FOC List")
+        st.subheader(f"📦 {name} FOC Master List")
         f_c = find_col(foc_df, ["fabrication"])
-        f_list = foc_df[foc_df[f_c].astype(str).isin(df[fab_col].astype(str))] if not foc_df.empty else pd.DataFrame()
-        st.download_button(f"📥 Export FOC List", to_excel(f_list), f"{name}_FOC.xlsx")
-        st.dataframe(f_list, use_container_width=True)
+        f_list_master = foc_df[foc_df[f_c].astype(str).isin(df[fab_col].astype(str))] if not foc_df.empty else pd.DataFrame()
+        st.download_button(f"📥 Export {name} FOC List", to_excel(f_list_master), f"{name}_FOC.xlsx", key=f"foc_ex_{key_suffix}")
+        st.dataframe(f_list_master, use_container_width=True)
 
     with t3:
-        st.subheader(f"⏳ {name} Service Pending")
-        st.download_button(f"📥 Export Pending List", to_excel(critical), f"{name}_Pending.xlsx")
-        st.dataframe(critical, use_container_width=True)
+        st.subheader(f"⏳ {name} Service Pending List")
+        if overdue_col:
+            st.download_button(f"📥 Export {name} Pending List", to_excel(critical_data), f"{name}_Pending_Full.xlsx", key=f"pend_ex_{key_suffix}")
+            st.dataframe(critical_data, use_container_width=True)
+
+# ==============================
+# 📢 AUTOMATION CENTER
+# ==============================
+if nav == "📢 Automation Center":
+    st.title("📢 Automation & Broadcast Center")
+    st.info("Directly broadcast messages to Admin via WhatsApp Web link.")
+    
+    msg_input = st.text_area("Write Broadcast Message:", "Daily Update: All machines are running healthy.")
+    
+    phone_no = "917061158953"
+    encoded_msg = urllib.parse.quote(msg_input)
+    wa_link = f"https://wa.me/{phone_no}?text={encoded_msg}"
+    
+    st.markdown(f'''
+        <a href="{wa_link}" target="_blank">
+            <button style="border-radius:5px; background-color:#25D366; color:white; border:none; padding:12px 24px; cursor:pointer; font-size:16px;">
+                📱 Send WhatsApp Broadcast
+            </button>
+        </a>
+    ''', unsafe_allow_html=True)
+    
+    st.divider()
+    st.subheader("🛠️ Automation Logs")
+    st.write("Current Broadcast Target: Admin (+91 7061158953)")
 
 # --- EXECUTION ---
 if nav == "DPSAC Tracker":
