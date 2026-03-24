@@ -61,12 +61,10 @@ def to_excel(df):
 def load():
     f_list = os.listdir('.')
     def f(name): return next((x for x in f_list if name.lower() in x.lower() and x.endswith('.xlsx')), None)
-    
     m_df = pd.read_excel(f("Master_Data"), engine='openpyxl') if f("Master_Data") else pd.DataFrame()
     m_od_df = pd.read_excel(f("Master_OD_Data"), engine='openpyxl') if f("Master_OD_Data") else pd.DataFrame()
     foc_df = pd.read_excel(f("Active_FOC"), engine='openpyxl') if f("Active_FOC") else pd.DataFrame()
     srv_df = pd.read_excel(f("Service_Details"), engine='openpyxl') if f("Service_Details") else pd.DataFrame()
-    
     for d in [m_df, m_od_df, foc_df, srv_df]:
         if not d.empty: d.columns = [str(c).strip() for c in d.columns]
     return m_df, m_od_df, foc_df, srv_df
@@ -74,7 +72,7 @@ def load():
 master_df, master_od_df, foc_df, service_df = load()
 
 # ==============================
-# 🏢 NAVIGATION
+# 🏢 NAVIGATION & SIDEBAR
 # ==============================
 role = st.session_state["role"]
 st.sidebar.title(f"👋 {st.session_state['user'].upper()}")
@@ -83,20 +81,19 @@ if role == "all":
 elif role == "dpsac": nav = "DPSAC Tracker"
 else: nav = "INDUSTRIAL Tracker"
 
-# Sidebar Stats logic (Shared)
-active_view_df = master_df if nav == "DPSAC Tracker" else master_od_df
-if not active_view_df.empty and nav != "📢 Automation Center":
-    s_col = find_col(active_view_df, ["unit", "status"])
-    if s_col:
-        st.sidebar.markdown("### 📋 Unit Status Counts")
+# --- SIDEBAR STATS ---
+active_v_df = master_df if nav == "DPSAC Tracker" else master_od_df
+if not active_v_df.empty and nav != "📢 Automation Center":
+    scol = find_col(active_v_df, ["unit", "status"])
+    if scol:
+        st.sidebar.markdown("### 📋 Unit Status")
         for s in ["Active", "Shifted", "Sold"]:
-            c_val = len(active_view_df[active_view_df[s_col].astype(str).str.contains(s, case=False, na=False)])
+            c_val = len(active_v_df[active_v_df[scol].astype(str).str.contains(s, case=False, na=False)])
             st.sidebar.write(f"**{s}:** {c_val}")
-    
-    cat_col = find_col(active_view_df, ["category"])
-    if cat_col:
+    catcol = find_col(active_v_df, ["category"])
+    if catcol:
         st.sidebar.markdown("### 📦 Category Breakdown")
-        for k, v in active_view_df[cat_col].value_counts().items():
+        for k, v in active_v_df[catcol].value_counts().items():
             st.sidebar.write(f"**{k}:** {v}")
 
 if st.sidebar.button("Logout"):
@@ -108,82 +105,80 @@ if st.sidebar.button("Logout"):
 def run_tracker(df, name, key_suffix):
     st.title(f"🛠️ {name} Tracker Pro")
     
-    # Dashboard Analytics
-    with st.expander("📊 Dashboard Analytics & Graphs", expanded=False):
-        c1, c2 = st.columns(2)
-        sc = find_col(df, ["unit", "status"])
-        if sc: c1.bar_chart(df[sc].value_counts())
-        cc = find_col(df, ["category"])
-        if cc: c2.bar_chart(df[cc].value_counts())
-
-    # Alert section with UNIQUE KEY fix
+    # 🚨 OVERDUE ALERTS
     overdue_col = find_col(df, ["over", "due"]) or find_col(df, ["red", "count"])
     if overdue_col:
-        critical_data = df[df[overdue_col] != 0]
-        if not critical_data.empty:
-            st.error(f"⚠️ {len(critical_data)} Machines are OVERDUE!")
-            # Added unique key here to prevent DuplicateElementId error
-            st.download_button(label=f"📥 Export Pending List ({name})", 
-                             data=to_excel(critical_data), 
-                             file_name=f"{name}_Pending.xlsx",
-                             key=f"dl_pending_{key_suffix}")
+        crit_data = df[df[overdue_col] != 0]
+        if not crit_data.empty:
+            st.error(f"⚠️ {len(crit_data)} Machines are OVERDUE!")
+            st.download_button(f"📥 Export Pending List", to_excel(crit_data), f"{name}_Pending.xlsx", key=f"dl_p_{key_suffix}")
 
     t1, t2, t3 = st.tabs(["Machine Tracker", "📦 FOC List", "⏳ Service Pending"])
     
     with t1:
         colA, colB = st.columns(2)
         cust_col, fab_col = find_col(df, ["customer"]), find_col(df, ["fabrication"])
-        sel_c = colA.selectbox(f"Select Customer ({name})", ["All"] + sorted(df[cust_col].astype(str).unique()), key=f"sel_c_{key_suffix}")
+        sel_c = colA.selectbox(f"Select Customer", ["All"] + sorted(df[cust_col].astype(str).unique()), key=f"sc_{key_suffix}")
         df_f = df if sel_c == "All" else df[df[cust_col] == sel_c]
-        sel_f = colB.selectbox(f"Select Fabrication ({name})", ["Select"] + sorted(df_f[fab_col].astype(str).unique()), key=f"sel_f_{key_suffix}")
+        sel_f = colB.selectbox(f"Select Fabrication", ["Select"] + sorted(df_f[fab_col].astype(str).unique()), key=f"sf_{key_suffix}")
 
         if sel_f != "Select":
             row = df_f[df_f[fab_col].astype(str) == sel_f].iloc[0]
-            try:
-                last_h = float(row.get(find_col(df, ["hmr", "cal"]), 0))
-                avg = float(row.get(find_col(df, ["avg", "running"]), 0))
-                l_date = pd.to_datetime(row.get(find_col(df, ["hmr", "date"])))
-                live_hmr = int(last_h + (max(0, (pd.Timestamp.today() - l_date).days) * avg))
-            except: live_hmr = int(row.get(find_col(df, ["hmr", "cal"]), 0))
+            
+            # --- CALCULATIONS ---
+            last_h = float(row.get(find_col(df, ["hmr", "cal"]), 0))
+            avg_hrs_day = float(row.get(find_col(df, ["avg", "running"]), 0))
+            last_call_h = float(row.get(find_col(df, ["last", "call", "hmr"]), 0))
+            l_date_val = pd.to_datetime(row.get(find_col(df, ["hmr", "date"])))
+            l_call_date = pd.to_datetime(row.get(find_col(df, ["last", "call", "date"])))
+            
+            days_passed = (pd.Timestamp.today() - l_date_val).days
+            live_hmr = int(last_h + (max(0, days_passed) * avg_hrs_day))
+            since_service = (pd.Timestamp.today() - l_call_date).days if not pd.isna(l_call_date) else 0
 
             m1, m2, m3, m4 = st.columns(4)
-            with m1:
+            with m1: # --- CUSTOMER INFO SECTION ---
                 st.info("📋 Info")
-                st.write(f"**Cust:** {row[cust_col]}\n**HMR Live:** `{live_hmr}`")
-                st.download_button("📄 Export Report", to_excel(pd.DataFrame([row])), f"Report_{sel_f}.xlsx", key=f"dl_rep_{sel_f}")
+                st.write(f"**Cust:** {row[cust_col]}")
+                st.write(f"**Live HMR:** `{live_hmr}`")
+                st.write(f"**Avg Running/Day:** {avg_hrs_day} Hrs")
+                st.write(f"**Last Call HMR:** {last_call_h}")
+                st.write(f"**Last Call Date:** {fmt(l_call_date)}")
+                st.write(f"**Since Last Service:** {since_service} Days")
+                st.download_button("📄 Export Machine Data", to_excel(pd.DataFrame([row])), f"Report_{sel_f}.xlsx", key=f"ex_{sel_f}")
             
-            parts_map = {
-                "OIL": ["oil"], "AFC": ["afc"], "AFE": ["afe"], "MOF": ["mof"], 
-                "ROF": ["rof"], "AOS": ["aos"], "RGT": ["rgt"], "1500": ["1500"], "3000": ["3000"]
-            } if name == "DPSAC" else {
+            # --- 9 PARTS LOOKUP FIX ---
+            pm = {
                 "OIL": ["oil"], "AF": ["af"], "OF": ["of"], "AOS": ["aos"], 
                 "RGT": ["rgt"], "VK": ["vk", "valve"], "PF": ["pf"], "FF": ["ff"], "CF": ["cf"]
+            } if name == "INDUSTRIAL" else {
+                "OIL": ["oil"], "AFC": ["afc"], "AFE": ["afe"], "MOF": ["mof"], 
+                "ROF": ["rof"], "AOS": ["aos"], "RGT": ["rgt"], "1500": ["1500"], "3000": ["3000"]
             }
             
-            with m2:
+            with m2: # Replacement History
                 st.info("🔧 History (9 Parts)")
-                for label, keys in parts_map.items():
-                    col = next((c for c in df.columns if all(k in c.lower() for k in keys) and "date" in c.lower() and "due" not in c.lower()), None)
-                    st.write(f"**{label}:** {fmt(row.get(col))}")
+                for lbl, ks in pm.items():
+                    c = next((x for x in df.columns if all(k in x.lower() for k in ks) and "date" in x.lower() and "due" not in x.lower()), None)
+                    st.write(f"**{lbl}:** {fmt(row.get(c))}")
             
-            with m3:
+            with m3: # Live Remaining
                 st.info("⏳ Remaining (9 Parts)")
-                for label, keys in parts_map.items():
-                    rem_c = next((c for c in df.columns if all(k in c.lower() for k in keys) and "remaining" in c.lower()), None)
-                    if rem_c and pd.notna(row[rem_c]):
-                        act_rem = int(float(row[rem_c]) - (live_hmr - last_h))
-                        icon = "🟢" if act_rem > 100 else "🟡" if act_rem > 0 else "🔴"
-                        st.write(f"**{label}:** {icon} {act_rem}")
-                    else: st.write(f"**{label}:** N/A")
+                for lbl, ks in pm.items():
+                    rc = next((x for x in df.columns if all(k in x.lower() for k in ks) and "remaining" in x.lower()), None)
+                    if rc and pd.notna(row[rc]):
+                        act_r = int(float(row[rc]) - (live_hmr - last_h))
+                        icon = "🟢" if act_r > 100 else "🟡" if act_r > 0 else "🔴"
+                        st.write(f"**{lbl}:** {icon} {act_r}")
+                    else: st.write(f"**{lbl}:** N/A")
             
-            with m4:
+            with m4: # Next Due Dates
                 st.error("🚨 Next Due (9 Parts)")
-                for label, keys in parts_map.items():
-                    due_c = next((c for c in df.columns if all(k in c.lower() for k in keys) and "due" in c.lower() and "date" in c.lower()), None)
-                    st.write(f"**{label}:** {fmt(row.get(due_c))}")
+                for lbl, ks in pm.items():
+                    dc = next((x for x in df.columns if all(k in x.lower() for k in ks) and "due" in x.lower() and "date" in x.lower()), None)
+                    st.write(f"**{lbl}:** {fmt(row.get(dc))}")
 
             st.divider()
-            st.subheader("🎁 Transactional Details")
             h1, h2 = st.tabs(["🎁 FOC Details", "🕒 Service History"])
             with h1:
                 f_c = find_col(foc_df, ["fabrication"])
@@ -192,46 +187,18 @@ def run_tracker(df, name, key_suffix):
                 s_c = find_col(service_df, ["fabrication"])
                 if s_c: st.dataframe(service_df[service_df[s_c].astype(str) == sel_f], use_container_width=True)
 
-    with t2:
-        st.subheader(f"📦 {name} FOC Master List")
+    with t2: # FOC Master List Export
+        st.subheader(f"📦 {name} FOC List")
         f_c = find_col(foc_df, ["fabrication"])
-        f_list_master = foc_df[foc_df[f_c].astype(str).isin(df[fab_col].astype(str))] if not foc_df.empty else pd.DataFrame()
-        st.download_button(f"📥 Export {name} FOC List", to_excel(f_list_master), f"{name}_FOC.xlsx", key=f"foc_ex_{key_suffix}")
-        st.dataframe(f_list_master, use_container_width=True)
+        f_list = foc_df[foc_df[f_c].astype(str).isin(df[fab_col].astype(str))] if not foc_df.empty else pd.DataFrame()
+        st.download_button(f"📥 Export FOC List", to_excel(f_list), f"{name}_FOC.xlsx", key=f"f_ex_{key_suffix}")
+        st.dataframe(f_list, use_container_width=True)
 
-    with t3:
-        st.subheader(f"⏳ {name} Service Pending List")
-        if overdue_col:
-            st.download_button(f"📥 Export {name} Pending List", to_excel(critical_data), f"{name}_Pending_Full.xlsx", key=f"pend_ex_{key_suffix}")
-            st.dataframe(critical_data, use_container_width=True)
-
-# ==============================
-# 📢 AUTOMATION CENTER
-# ==============================
-if nav == "📢 Automation Center":
-    st.title("📢 Automation & Broadcast Center")
-    st.info("Directly broadcast messages to Admin via WhatsApp Web link.")
-    
-    msg_input = st.text_area("Write Broadcast Message:", "Daily Update: All machines are running healthy.")
-    
-    phone_no = "917061158953"
-    encoded_msg = urllib.parse.quote(msg_input)
-    wa_link = f"https://wa.me/{phone_no}?text={encoded_msg}"
-    
-    st.markdown(f'''
-        <a href="{wa_link}" target="_blank">
-            <button style="border-radius:5px; background-color:#25D366; color:white; border:none; padding:12px 24px; cursor:pointer; font-size:16px;">
-                📱 Send WhatsApp Broadcast
-            </button>
-        </a>
-    ''', unsafe_allow_html=True)
-    
-    st.divider()
-    st.subheader("🛠️ Automation Logs")
-    st.write("Current Broadcast Target: Admin (+91 7061158953)")
+    with t3: # Service Pending List Export
+        st.subheader(f"⏳ {name} Service Pending")
+        st.download_button(f"📥 Export Pending List", to_excel(crit_data), f"{name}_Pending.xlsx", key=f"p_ex_{key_suffix}")
+        st.dataframe(crit_data, use_container_width=True)
 
 # --- EXECUTION ---
-if nav == "DPSAC Tracker":
-    run_tracker(master_df, "DPSAC", "DPSAC")
-elif nav == "INDUSTRIAL Tracker":
-    run_tracker(master_od_df, "INDUSTRIAL", "IND")
+if nav == "DPSAC Tracker": run_tracker(master_df, "DPSAC", "DP")
+elif nav == "INDUSTRIAL Tracker": run_tracker(master_od_df, "INDUSTRIAL", "IN")
