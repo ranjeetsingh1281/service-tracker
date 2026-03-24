@@ -80,14 +80,14 @@ if role == "all":
 elif role == "dpsac": nav = "DPSAC Tracker"
 else: nav = "INDUSTRIAL Tracker"
 
-# Sidebar Stats
 active_v_df = master_df if nav == "DPSAC Tracker" else master_od_df
 if not active_v_df.empty and nav != "📢 Automation Center":
     scol = find_col(active_v_df, ["unit", "status"])
     if scol:
         st.sidebar.markdown("### 📋 Unit Status Counts")
         for s in ["Active", "Shifted", "Sold"]:
-            st.sidebar.write(f"**{s}:** {len(active_v_df[active_v_df[scol].astype(str).str.contains(s, case=False, na=False)])}")
+            c_v = len(active_v_df[active_v_df[scol].astype(str).str.contains(s, case=False, na=False)])
+            st.sidebar.write(f"**{s}:** {c_v}")
     catcol = find_col(active_v_df, ["category"])
     if catcol:
         st.sidebar.markdown("### 📦 Category Breakdown")
@@ -102,6 +102,18 @@ if st.sidebar.button("Logout"):
 def run_tracker(df, name, key_suffix):
     st.title(f"🛠️ {name} Tracker Pro")
     
+    # 📊 GRAPHS SECTION
+    with st.expander("📊 Click to View Dashboard Analytics & Graphs", expanded=False):
+        c1, c2 = st.columns(2)
+        sc = find_col(df, ["unit", "status"])
+        if sc: 
+            c1.subheader("Unit Status Distribution")
+            c1.bar_chart(df[sc].value_counts())
+        cc = find_col(df, ["category"])
+        if cc: 
+            c2.subheader("Category Breakdown")
+            c2.bar_chart(df[cc].value_counts())
+
     overdue_col = find_col(df, ["over", "due"]) or find_col(df, ["red", "count"])
     if overdue_col:
         crit = df[df[overdue_col] != 0]
@@ -109,47 +121,48 @@ def run_tracker(df, name, key_suffix):
             st.error(f"⚠️ {len(crit)} Machines are OVERDUE!")
             st.download_button(f"📥 Export Pending List", to_excel(crit), f"{name}_Pending.xlsx", key=f"p_{key_suffix}")
 
-    t1, t2, t3 = st.tabs(["Machine Tracker", "⏳ Service Pending", "📦 FOC List"])
+    t1, t2, t3 = st.tabs(["Machine Tracker", "📦 FOC List", "⏳ Service Pending"])
     
     with t1:
         colA, colB = st.columns(2)
         cust_col, fab_col = find_col(df, ["customer"]), find_col(df, ["fabrication"])
-        sel_c = colA.selectbox(f"Select Customer", ["All"] + sorted(df[cust_col].astype(str).unique()), key=f"sc_{key_suffix}")
+        sel_c = colA.selectbox(f"Select Customer ({name})", ["All"] + sorted(df[cust_col].astype(str).unique()), key=f"sc_{key_suffix}")
         df_f = df if sel_c == "All" else df[df[cust_col] == sel_c]
-        sel_f = colB.selectbox(f"Select Fabrication", ["Select"] + sorted(df_f[fab_col].astype(str).unique()), key=f"sf_{key_suffix}")
+        sel_f = colB.selectbox(f"Select Fabrication ({name})", ["Select"] + sorted(df_f[fab_col].astype(str).unique()), key=f"sf_{key_suffix}")
 
         if sel_f != "Select":
             row = df_f[df_f[fab_col].astype(str) == sel_f].iloc[0]
             
-            # --- 📊 CUSTOMER INFO & HMR FIELDS ---
+            # --- 📊 INFO BOX ---
             m1, m2, m3, m4 = st.columns(4)
             with m1:
                 st.info("📋 Info")
                 st.write(f"**Cust:** {row[cust_col]}")
-                st.write(f"**Avg Running/Day:** {row.get(find_col(df, ['avg', 'running']), 'N/A')}🏃")
-                st.write(f"**Current HMR (BL):** `{row.get('CURRENT HMR', 'N/A')}`🎰")
-                st.write(f"**Load HMR (BM):** `{row.get('CURRENT LOAD HMR', 'N/A')}`🎰")
-                st.write(f"**Unload HMR (BN):** `{row.get('CURRENT UNLOAD HMR', 'N/A')}`🎰")
-                st.write(f"**Difference HMR (BO):** `{row.get('DIFFRENT HMR', 'N/A')}`🎰")
-                st.write(f"**Total Last HMR (DU):** `{row.get('MDA Total Hours', 'N/A')}`🎰")
-                st.write(f"**Last Service Date:** {fmt(row.get(find_col(df, ['last', 'call', 'date'])))}📅")
-                st.download_button("📄 Export Report", to_excel(pd.DataFrame([row])), f"Report_{sel_f}.xlsx", key=f"ex_{sel_f}")
+                st.write(f"**Avg Running/Day:** {row.get(find_col(df, ['avg', 'running']), 'N/A')}")
+                st.write(f"**Current HMR (BL):** `{row.get('CURRENT HMR', 'N/A')}`")
+                st.write(f"**Load HMR (BM):** `{row.get('CURRENT LOAD HMR', 'N/A')}`")
+                st.write(f"**Unload HMR (BN):** `{row.get('CURRENT UNLOAD HMR', 'N/A')}`")
+                st.write(f"**Difference HMR (BO):** `{row.get('DIFFRENT HMR', 'N/A')}`")
+                st.write(f"**Total Last HMR (DU):** `{row.get('MDA Total Hours', 'N/A')}`")
+                st.write(f"**Last Service Date:** {fmt(row.get(find_col(df, ['last', 'call', 'date'])))}")
+                st.download_button("📄 Export Machine Data", to_excel(pd.DataFrame([row])), f"Report_{sel_f}.xlsx", key=f"ex_{sel_f}")
             
-            # --- 🔧 9 PARTS DIRECT LOOKUP ---
+            # --- 🔧 DUAL-ENGINE 9 PARTS MAPPING ---
             if name == "INDUSTRIAL":
                 pm = {"OIL":["oil","r","date"],"AF":["af","r","date"],"OF":["of","r","date"],"AOS":["aos","r","date"],"RGT":["rgt","r","date"],"VK":["valvekit","r","date"],"PF":["pf","due"],"FF":["ff","due"],"CF":["cf","due"]}
-            else:
-                pm = {"OIL":["oil"],"AFC":["afc"],"AFE":["afe"],"MOF":["mof"],"ROF":["rof"],"AOS":["aos"],"RGT":["rgt"],"1500":["1500"],"3000":["3000"]}
+            else: # DPSAC Tracker Mapping
+                pm = {"OIL":["oil","repl"],"AFC":["afc","repl"],"AFE":["afe","repl"],"MOF":["mof","repl"],"ROF":["rof","repl"],"AOS":["aos","repl"],"RGT":["rgt","repl"],"1500":["1500","repl"],"3000":["3000","repl"]}
 
             with m2:
                 st.info("🔧 History (R Date)")
                 for lbl, ks in pm.items():
                     c = next((x for x in df.columns if all(k in x.lower() for k in ks)), None)
+                    if not c: c = next((x for x in df.columns if lbl.lower() in x.lower() and "replaced" in x.lower() and "date" in x.lower()), None)
                     st.write(f"**{lbl}:** {fmt(row.get(c))}")
             with m3:
                 st.info("⏳ Remaining (HMR)")
                 for lbl, ks in pm.items():
-                    rc = next((x for x in df.columns if ks[0] in x.lower() and "rem" in x.lower() and "hmr" in x.lower()), None)
+                    rc = next((x for x in df.columns if lbl.lower() in x.lower() and "rem" in x.lower() and "hmr" in x.lower()), None)
                     val = row.get(rc, "N/A")
                     icon = '🟢' if pd.notna(val) and str(val).replace('.','').replace('-','').isdigit() and float(val)>100 else '🔴'
                     st.write(f"**{lbl}:** {icon} {val}")
@@ -160,7 +173,7 @@ def run_tracker(df, name, key_suffix):
                     st.write(f"**{lbl}:** {fmt(row.get(dc))}")
 
             st.divider()
-            h1, h2 = st.tabs(["🏷️ FOC Details", "📱 Service History"])
+            h1, h2 = st.tabs(["🎁 FOC Details", "🕒 Service History"])
             with h1:
                 f_c = find_col(foc_df, ["fabrication"])
                 if f_c: st.dataframe(foc_df[foc_df[f_c].astype(str) == sel_f], use_container_width=True)
@@ -173,7 +186,7 @@ def run_tracker(df, name, key_suffix):
 # ==============================
 if nav == "📢 Automation Center":
     st.title("📢 Automation Center")
-    msg = st.text_area("Broadcast Message:", "Daily Report: Overdue machines require attention.")
+    msg = st.text_area("Broadcast Message:", "Daily Report Update: Check Dashboard for Overdue status.")
     wa_link = f"https://wa.me/917061158953?text={urllib.parse.quote(msg)}"
     st.markdown(f'<a href="{wa_link}" target="_blank"><button style="background-color:#25D366; color:white; padding:10px; border:none; border-radius:5px; cursor:pointer;">📱 Send WhatsApp Alert</button></a>', unsafe_allow_html=True)
 
