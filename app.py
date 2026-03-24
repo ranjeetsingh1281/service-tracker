@@ -36,8 +36,12 @@ st.set_page_config(page_title="ELGi Global Tracker Pro", layout="wide")
 
 def fmt(dt):
     if pd.isna(dt) or dt == 0 or str(dt).lower() in ["nan", "nat"]: return "N/A"
-    try: return pd.to_datetime(dt).strftime('%d-%b-%y')
-    except: return str(dt)
+    # Handling the 01-Jan-70 issue (Unix epoch start)
+    try:
+        val = pd.to_datetime(dt)
+        if val.year <= 1970: return "N/A"
+        return val.strftime('%d-%b-%y')
+    except: return "N/A"
 
 def find_col(df, keywords):
     if df.empty: return None
@@ -80,7 +84,7 @@ if role == "all":
 elif role == "dpsac": nav = "DPSAC Tracker"
 else: nav = "INDUSTRIAL Tracker"
 
-# --- 📊 SIDEBAR COUNTS & CATEGORIES ---
+# Sidebar Stats
 st.sidebar.markdown("---")
 active_df = master_df if nav == "DPSAC Tracker" else master_od_df
 if not active_df.empty:
@@ -88,8 +92,8 @@ if not active_df.empty:
     if s_col:
         st.sidebar.markdown("### 📋 Unit Status Counts")
         for s in ["Active", "Shifted", "Sold"]:
-            count = len(active_df[active_df[s_col].astype(str).str.contains(s, case=False, na=False)])
-            st.sidebar.write(f"**{s}:** {count}")
+            c = len(active_df[active_df[s_col].astype(str).str.contains(s, case=False, na=False)])
+            st.sidebar.write(f"**{s}:** {c}")
     
     cat_col = find_col(active_df, ["category"])
     if cat_col:
@@ -106,15 +110,6 @@ if st.sidebar.button("Logout"):
 def run_tracker(df, name, key_suffix):
     st.title(f"🛠️ {name} Tracker Pro")
     
-    # Graphs & Charts
-    with st.expander("📊 Dashboard Analytics & Graphs", expanded=False):
-        c1, c2 = st.columns(2)
-        sc = find_col(df, ["unit", "status"])
-        if sc: c1.bar_chart(df[sc].value_counts())
-        cc = find_col(df, ["category"])
-        if cc: c2.bar_chart(df[cc].value_counts())
-
-    # Alerts
     overdue_col = find_col(df, ["over", "due"]) or find_col(df, ["red", "count"])
     if overdue_col:
         critical = df[df[overdue_col] != 0]
@@ -122,7 +117,6 @@ def run_tracker(df, name, key_suffix):
             st.error(f"⚠️ {len(critical)} Machines are OVERDUE!")
             st.download_button(f"📥 Export Pending List", to_excel(critical), f"{name}_Pending.xlsx")
 
-    # Tabs
     t1, t2, t3 = st.tabs(["Machine Tracker", "📦 FOC List", "⏳ Service Pending"])
     
     with t1:
@@ -147,33 +141,36 @@ def run_tracker(df, name, key_suffix):
                 st.write(f"**Cust:** {row[cust_col]}\n**HMR Live:** `{live_hmr}`")
                 st.download_button("📄 Export Report", to_excel(pd.DataFrame([row])), f"Report_{sel_f}.xlsx")
             
-            # Master Parts List (Synchronized for all sections)
-            parts = ["oil","afc","afe","mof","rof","aos","rgt","1500","3000"] if name == "DPSAC" else ["oil","af","of","aos","rgt","vk","pf","ff","cf"]
+            # --- VK FIX: Keyword mapping for robust lookup ---
+            parts_map = {
+                "OIL": ["oil"], "AFC": ["afc"], "AFE": ["afe"], "MOF": ["mof"], 
+                "ROF": ["rof"], "AOS": ["aos"], "RGT": ["rgt"], "1500": ["1500"], "3000": ["3000"]
+            } if name == "DPSAC" else {
+                "OIL": ["oil"], "AF": ["af"], "OF": ["of"], "AOS": ["aos"], 
+                "RGT": ["rgt"], "VK": ["vk", "valve"], "PF": ["pf"], "FF": ["ff"], "CF": ["cf"]
+            }
             
             with m2:
                 st.info("🔧 History (9 Parts)")
-                for p in parts:
-                    col = next((c for c in df.columns if p in c.lower() and "date" in c.lower() and "due" not in c.lower()), None)
-                    st.write(f"**{p.upper()}:** {fmt(row.get(col))}")
+                for label, keys in parts_map.items():
+                    col = next((c for c in df.columns if all(k in c.lower() for k in keys) and "date" in c.lower() and "due" not in c.lower()), None)
+                    st.write(f"**{label}:** {fmt(row.get(col))}")
             
             with m3:
                 st.info("⏳ Remaining (9 Parts)")
-                for p in parts:
-                    # Searching for remaining columns dynamically
-                    rem_c = next((c for c in df.columns if p in c.lower() and "remaining" in c.lower()), None)
+                for label, keys in parts_map.items():
+                    rem_c = next((c for c in df.columns if all(k in c.lower() for k in keys) and "remaining" in c.lower()), None)
                     if rem_c and pd.notna(row[rem_c]):
-                        # Adjusting remaining based on live HMR delta
                         act_rem = int(float(row[rem_c]) - (live_hmr - last_h))
                         icon = "🟢" if act_rem > 100 else "🟡" if act_rem > 0 else "🔴"
-                        st.write(f"**{p.upper()}:** {icon} {act_rem}")
-                    else:
-                        st.write(f"**{p.upper()}:** N/A")
+                        st.write(f"**{label}:** {icon} {act_rem}")
+                    else: st.write(f"**{label}:** N/A")
             
             with m4:
                 st.error("🚨 Next Due (9 Parts)")
-                for p in parts:
-                    due_c = next((c for c in df.columns if p in c.lower() and "due" in c.lower() and "date" in c.lower()), None)
-                    if due_c: st.write(f"**{p.upper()}:** {fmt(row.get(due_c))}")
+                for label, keys in parts_map.items():
+                    due_c = next((c for c in df.columns if all(k in c.lower() for k in keys) and "due" in c.lower() and "date" in c.lower()), None)
+                    st.write(f"**{label}:** {fmt(row.get(due_c))}")
 
             st.divider()
             h1, h2 = st.tabs(["🎁 FOC Details", "🕒 Service History"])
