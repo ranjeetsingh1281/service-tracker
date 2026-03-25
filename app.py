@@ -13,9 +13,8 @@ from io import BytesIO
 # ==============================
 USER_DB = {
     "admin": {"pass": "admin123", "role": "all"},
-    "manager": {"pass": "manager123", "role": "all"},
-    "dpsac": {"pass": "dpsac123", "role": "dpsac"},
-    "indus": {"pass": "indus123", "role": "industrial"}
+    "user1": {"pass": "dpsac123", "role": "dpsac"},
+    "user2": {"pass": "ind123", "role": "industrial"}
 }
 
 def login():
@@ -32,9 +31,9 @@ if "login" not in st.session_state or not st.session_state["login"]:
     login(); st.stop()
 
 # ==============================
-# ⛑️ HELPERS
+# ⚙️ HELPERS
 # ==============================
-st.set_page_config(page_title="🔎 ELGi Tracker Pro", layout="wide")
+st.set_page_config(page_title="ELGi Global Tracker Pro", layout="wide")
 
 def fmt(dt):
     if pd.isna(dt) or dt == 0 or str(dt).lower() in ["nan", "nat"]: return "N/A"
@@ -76,7 +75,7 @@ master_df, master_od_df, foc_df, service_df = load_data()
 # ==============================
 role = st.session_state["role"]
 st.sidebar.title(f"👋 {st.session_state['user'].upper()}")
-nav = st.sidebar.radio("Navigation:", ["🎒 DPSAC TRACKER", "🏗️ INDUSTRIAL TRACKER", "📢 Automation Center"]) if role == "all" else (nav := "DPSAC Tracker" if role == "dpsac" else "INDUSTRIAL Tracker")
+nav = st.sidebar.radio("Navigation:", ["DPSAC Tracker", "INDUSTRIAL Tracker", "📢 Automation Center"]) if role == "all" else (nav := "DPSAC Tracker" if role == "dpsac" else "INDUSTRIAL Tracker")
 
 if st.sidebar.button("Logout"):
     st.session_state["login"] = False; st.rerun()
@@ -117,13 +116,14 @@ def run_tracker(df, name, key_suffix):
             m1, m2, m3, m4 = st.columns(4)
             with m1:
                 st.info("📋 Info")
-                st.write(f"**Customer Name:** {row[cust_col]}")
+                st.info("📋 Info")
+                st.write(f"**Cust:** {row[cust_col]}")
                 st.write(f"**Avg Running/Day:** {row.get(find_col(df, ['avg', 'running']), 'N/A')}")
-                st.write(f"**Current HMR:** `{row.get('CURRENT HMR', 'N/A')}`")
-                st.write(f"**Load HMR:** `{row.get('CURRENT LOAD HMR', 'N/A')}`")
-                st.write(f"**Unload HMR:** `{row.get('CURRENT UNLOAD HMR', 'N/A')}`")
-                st.write(f"**Difference HMR:** `{row.get('DIFFRENT HMR', 'N/A')}`")
-                st.write(f"**Total Last HMR:** `{row.get('MDA Total Hours', 'N/A')}`")
+                st.write(f"**Current HMR (BL):** `{row.get('CURRENT HMR', 'N/A')}`")
+                st.write(f"**Load HMR (BM):** `{row.get('CURRENT LOAD HMR', 'N/A')}`")
+                st.write(f"**Unload HMR (BN):** `{row.get('CURRENT UNLOAD HMR', 'N/A')}`")
+                st.write(f"**Difference HMR (BO):** `{row.get('DIFFRENT HMR', 'N/A')}`")
+                st.write(f"**Total Last HMR (DU):** `{row.get('MDA Total Hours', 'N/A')}`")
                 st.write(f"**Last Service Date:** {fmt(row.get(find_col(df, ['last', 'call', 'date'])))}")
                 st.download_button("📄 Export Report", to_excel(pd.DataFrame([row])), f"Report_{sel_f}.xlsx", key=f"ex_{sel_f}")
             
@@ -134,19 +134,19 @@ def run_tracker(df, name, key_suffix):
                 pm = {"OIL":["oil","repl"],"AFC":["afc","repl"],"AFE":["afe","repl"],"MOF":["mof","repl"],"ROF":["rof","repl"],"AOS":["aos","repl"],"RGT":["rgt","repl"],"1500":["1500","repl"],"3000":["3000","repl"]}
 
             with m2:
-                st.info("🔧 Last Replace date")
+                st.info("🔧 History (R Date)")
                 for lbl, ks in pm.items():
                     c = next((x for x in df.columns if all(k in x.lower() for k in ks)), None)
                     st.write(f"**{lbl}:** {fmt(row.get(c))}")
             with m3:
-                st.info("⏳ Remaining Hours")
+                st.info("⏳ Remaining (HMR)")
                 for lbl, ks in pm.items():
                     rc = next((x for x in df.columns if lbl.lower() in x.lower() and "rem" in x.lower()), None)
                     val = row.get(rc, "N/A")
                     icon = '🟢' if pd.notna(val) and str(val).replace('.','').replace('-','').isdigit() and float(val)>100 else '🔴'
                     st.write(f"**{lbl}:** {icon} {val}")
             with m4:
-                st.error("🚨 Next Due date")
+                st.error("🚨 Next Due (Date)")
                 for lbl, ks in pm.items():
                     dc = next((x for x in df.columns if lbl.lower() in x.lower() and "due" in x.lower() and "date" in x.lower()), None)
                     st.write(f"**{lbl}:** {fmt(row.get(dc))}")
@@ -158,7 +158,7 @@ def run_tracker(df, name, key_suffix):
         f_display = foc_df[foc_df[f_fab_col].astype(str).isin(fab_nos)] if f_fab_col else pd.DataFrame()
         
         if not f_display.empty:
-            st.download_button(f"📥 EXPORT {name} FOC", to_excel(f_display), f"{name}_FOC.xlsx", key=f"fex_{key_suffix}")
+            st.download_button(f"📥 Export {name} FOC", to_excel(f_display), f"{name}_FOC.xlsx", key=f"fex_{key_suffix}")
             st.dataframe(f_display, use_container_width=True)
         else: st.warning("No FOC entries found for this category.")
 
