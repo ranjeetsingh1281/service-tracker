@@ -5,3 +5,5 @@ reportlab
 xlsxwriter
 plotly
 pywhatkit
+supabase
+postgrest
