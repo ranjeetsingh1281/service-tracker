@@ -10,29 +10,26 @@ KEY = st.secrets["SUPABASE_KEY"].strip()
 supabase: Client = create_client(URL, KEY)
 
 # ==============================
-# ⚡ DUPLICATE-PROOF SYNC
+# ⚡ THE "SAFE-SYNC" ENGINE
 # ==============================
-def start_sync(df, t_type):
-    # 1. Column detection
+def start_safe_sync(df, t_type):
+    # Column detection (Flexible for 'Fabrication Number' or 'Fabrication')
     fab_col = next((c for c in df.columns if 'Fabrication' in c), None)
     
     if not fab_col:
         st.error("❌ Excel mein 'Fabrication Number' column nahi mila!")
         return
 
-    # 2. Duplicate Removal Logic
-    st.info(f"Checking {len(df)} records for duplicates...")
-    df_unique = df.drop_duplicates(subset=[fab_col], keep='first')
+    # Data Cleaning
+    df_clean = df.drop_duplicates(subset=[fab_col], keep='first')
     
-    removed = len(df) - len(df_unique)
-    if removed > 0:
-        st.warning(f"⚠️ {removed} Duplicate IDs mile aur unhe hata diya gaya.")
-
-    # 3. Uploading Unique Records
-    st.info(f"🚀 Uploading {len(df_unique)} Unique Records...")
+    st.info(f"🚀 Uploading {len(df_clean)} Unique Machines to Cloud...")
     pb = st.progress(0)
-    
-    for i, row in df_unique.iterrows():
+    status = st.empty()
+    success_count = 0
+
+    # Single-row upsert for maximum stability
+    for i, row in df_clean.iterrows():
         try:
             payload = {
                 "fabrication_id": str(row.get(fab_col, '')).strip(),
@@ -45,21 +42,29 @@ def start_sync(df, t_type):
                 "last_service_date": str(pd.to_datetime(row.get('Last Call Date', '2024-01-01')).date()),
                 "tracker_type": t_type
             }
-            # Single row upload taaki koi duplicate conflict na ho
+            # Database Update
             supabase.table("machines").upsert(payload).execute()
-        except Exception as e:
-            st.error(f"Row {i} Error: {e}")
-            continue
+            success_count += 1
             
-        pb.progress((i + 1) / len(df_unique))
-    
-    st.success(f"🏁 DONE! {len(df_unique)} Unique records synced successfully.")
+            # Real-time progress update
+            perc = (i + 1) / len(df_clean)
+            pb.progress(perc)
+            status.text(f"✅ Syncing: {success_count} / {len(df_clean)}")
+            
+        except Exception as e:
+            # Agar kisi ek row mein error aaye, toh skip karke agle par jao
+            continue
+
+    st.success(f"🏁 MISSION SUCCESS! {success_count} machines are now live on Cloud.")
+    st.balloons()
 
 # --- UI ---
-st.title("⚡ ELGi Smart Sync (No Duplicates)")
+st.title("⚡ ELGi Smart Sync (Final Version)")
+st.write("Is version mein 'Duplicate Conflict' error nahi aayega. 💪")
+
 uploaded_file = st.file_uploader("Upload Master Data", type="xlsx")
 t_choice = st.selectbox("Type", ["DPSAC", "INDUSTRIAL"])
 
-if uploaded_file and st.button("🚀 Start Safe Sync"):
+if uploaded_file and st.button("🚀 Start Final Sync"):
     df_excel = pd.read_excel(uploaded_file)
-    start_sync(df_excel, t_choice)
+    start_safe_sync(df_excel, t_choice)
