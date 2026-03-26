@@ -2,93 +2,84 @@ import streamlit as st
 import pandas as pd
 
 # --- Page Config ---
-st.set_page_config(page_title="ELGi Service Tracker (Local)", layout="wide", page_icon="🛠️")
+st.set_page_config(page_title="ELGi Service Tracker", layout="wide", page_icon="🚜")
 
 # --- Custom Styling ---
 st.markdown("""
     <style>
-    .main { background-color: #f5f7f9; }
-    .stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; border: 1px solid #ddd; }
+    .main { background-color: #f0f2f6; }
+    .stMetric { background-color: #ffffff; padding: 10px; border-radius: 8px; box-shadow: 2px 2px 5px rgba(0,0,0,0.1); }
     </style>
     """, unsafe_allow_html=True)
 
 # --- Data Loader (Direct from GitHub Files) ---
-@st.cache_data(ttl=600) # 10 min cache taaki bar-bar load na ho
+@st.cache_data
 def load_data():
     try:
-        # Aapki GitHub par uploaded files ke naam yahan sahi hone chahiye
-        df_master = pd.read_excel("Master_Data.xlsx")
-        df_history = pd.read_excel("Service_Details.xlsx")
+        # 1. Master Data Load
+        m_df = pd.read_excel("Master_Data.xlsx", engine='openpyxl')
+        # 2. History Data Load
+        h_df = pd.read_excel("Service_Details.xlsx", engine='openpyxl')
         
-        # Cleaning column names (Spaces hatane ke liye)
-        df_master.columns = df_master.columns.str.strip()
-        df_history.columns = df_history.columns.str.strip()
+        # Column names se extra spaces hatana
+        m_df.columns = m_df.columns.str.strip()
+        h_df.columns = h_df.columns.str.strip()
         
-        return df_master, df_history
+        return m_df, h_df
     except Exception as e:
-        st.error(f"⚠️ Excel File Load Nahi Hui: {e}")
-        st.info("💡 Tip: Check kijiye ki 'Master_Data.xlsx' GitHub repository mein hai ya nahi.")
+        st.error(f"⚠️ Error: Files nahi mil rahi hain! Check karein ki GitHub par 'Master_Data.xlsx' aur 'Service_Details.xlsx' uploaded hain.")
         return None, None
 
-# --- Main App ---
-st.title("🚜 ELGi Smart Service Tracker")
-st.write("Current Database: **Local Excel (GitHub)** ✅")
+# --- Main App Logic ---
+st.title("🚜 ELGi Smart Service Tracker (Offline Mode)")
+st.write("Current Status: **Excel Database Active** ✅")
 
 master, history = load_data()
 
 if master is not None:
-    # Sidebar Filters
-    st.sidebar.header("🔍 Search & Filter")
-    t_choice = st.sidebar.selectbox("Select Tracker Type", ["All", "DPSAC", "INDUSTRIAL"])
-    
-    # Filter by Type
-    if t_choice != "All":
-        # Maan lete hain column ka naam 'Type' hai, change as per your excel
-        if 'Type' in master.columns:
-            master = master[master['Type'] == t_choice]
+    # Sidebar Search
+    st.sidebar.header("🔍 Search Machine")
+    search_id = st.sidebar.text_input("Enter Fabrication Number", placeholder="e.g. 12345")
 
-    # Search Box
-    search_query = st.text_input("🔢 Enter Fabrication Number (e.g. 12345)", placeholder="Type number and press Enter...")
-
-    if search_query:
-        # Fabrication Number column detect karna
+    if search_id:
+        # Detect Fabrication Column
         fab_col = next((c for c in master.columns if 'Fabrication' in c), None)
         
         if fab_col:
-            # Match finding
-            res = master[master[fab_col].astype(str) == str(search_query).strip()]
+            # Finding exact match
+            res = master[master[fab_col].astype(str) == str(search_id).strip()]
             
             if not res.empty:
-                row = res.iloc[0]
-                st.success(f"✅ Machine Found: **{row.get('Customer', 'Unknown')}**")
+                machine = res.iloc[0]
+                st.success(f"✅ Machine Found: **{machine.get('Customer', 'N/A')}**")
                 
-                # Metrics Row
-                c1, c2, c3, c4 = st.columns(4)
-                c1.metric("Current HMR", f"{row.get('CURRENT HMR', 0)} hrs")
-                c2.metric("Category", row.get('Category', 'N/A'))
-                c3.metric("Status", row.get('Unit Status', 'Active'))
-                c4.metric("Avg Running", f"{row.get('Avg. Running', 0)} hrs")
+                # --- Quick Metrics ---
+                m1, m2, m3, m4 = st.columns(4)
+                m1.metric("Current HMR", f"{machine.get('CURRENT HMR', 0)} hrs")
+                m2.metric("Category", machine.get('Category', 'N/A'))
+                m3.metric("Status", machine.get('Unit Status', 'Active'))
+                m4.metric("Avg Running", f"{machine.get('Avg. Running', 0)} hrs")
 
                 # --- Service History Section ---
                 st.divider()
-                st.subheader("🕒 Service History & Visit Details")
+                st.subheader("📜 Detailed Service History")
                 
                 if history is not None:
                     h_fab_col = next((c for c in history.columns if 'Fabrication' in c), None)
                     if h_fab_col:
-                        h_res = history[history[h_fab_col].astype(str) == str(search_query).strip()]
+                        # Filter history for this machine
+                        h_res = history[history[h_fab_col].astype(str) == str(search_id).strip()]
                         if not h_res.empty:
                             st.dataframe(h_res, use_container_width=True)
                         else:
-                            st.warning("Is machine ki koi purani history nahi mili.")
+                            st.info("Is machine ki koi purani history Service_Details.xlsx mein nahi mili.")
             else:
-                st.error("❌ Machine nahi mili. Please check Fabrication Number.")
+                st.error("❌ Fabrication Number match nahi hua. Dubara check karein.")
         else:
-            st.error("Excel mein 'Fabrication' column nahi mila!")
+            st.error("Excel mein 'Fabrication' column nahi mil raha.")
+    else:
+        st.info("💡 Sidebar mein Fabrication Number daalein machine ki history dekhne ke liye.")
 
-else:
-    st.warning("Pehle GitHub par 'Master_Data.xlsx' upload kijiye.")
-
-# --- Sidebar Footer ---
+# Footer Check
 st.sidebar.markdown("---")
-st.sidebar.write("Last Sync: **Live from Excel**")
+st.sidebar.caption("💡 Tip: Excel file update karne par GitHub par 'Commit' zaroori hai.")
