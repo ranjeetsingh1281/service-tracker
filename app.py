@@ -20,16 +20,16 @@ def start_safe_sync(df, t_type):
         st.error("❌ Excel mein 'Fabrication Number' column nahi mila!")
         return
 
-    # Data Cleaning
+    # 1. Clean Duplicates inside Python first
     df_clean = df.drop_duplicates(subset=[fab_col], keep='first')
     
-    st.info(f"🚀 Uploading {len(df_clean)} Unique Machines to Cloud...")
+    st.info(f"🚀 Unique Machines found: {len(df_clean)}. Uploading to Cloud...")
     pb = st.progress(0)
     status = st.empty()
     success_count = 0
 
-    # Single-row upsert for maximum stability
-    for i, row in df_clean.iterrows():
+    # 2. Single-row upsert for maximum stability (Anti-Conflict)
+    for i, (idx, row) in enumerate(df_clean.iterrows()):
         try:
             payload = {
                 "fabrication_id": str(row.get(fab_col, '')).strip(),
@@ -42,29 +42,30 @@ def start_safe_sync(df, t_type):
                 "last_service_date": str(pd.to_datetime(row.get('Last Call Date', '2024-01-01')).date()),
                 "tracker_type": t_type
             }
-            # Database Update
+            # Database Update (Single Row)
             supabase.table("machines").upsert(payload).execute()
             success_count += 1
             
             # Real-time progress update
             perc = (i + 1) / len(df_clean)
             pb.progress(perc)
-            status.text(f"✅ Syncing: {success_count} / {len(df_clean)}")
+            status.text(f"✅ Processing: {success_count} / {len(df_clean)}")
             
         except Exception as e:
-            # Agar kisi ek row mein error aaye, toh skip karke agle par jao
+            # Agar kisi ek row mein conflict aaye, toh ignore karke agle par jao
             continue
 
-    st.success(f"🏁 MISSION SUCCESS! {success_count} machines are now live on Cloud.")
+    st.success(f"🏁 MISSION SUCCESS! {success_count} unique machines are now live on Cloud.")
     st.balloons()
 
 # --- UI ---
-st.title("⚡ ELGi Smart Sync (Final Version)")
-st.write("Is version mein 'Duplicate Conflict' error nahi aayega. 💪")
+st.title("🛡️ ELGi Smart Sync (Anti-Duplicate Version)")
+st.write("Is version mein 'Batch Conflict' error nahi aayega. 💪")
 
 uploaded_file = st.file_uploader("Upload Master Data", type="xlsx")
-t_choice = st.selectbox("Type", ["DPSAC", "INDUSTRIAL"])
+t_choice = st.selectbox("Select Machine Type", ["DPSAC", "INDUSTRIAL"])
 
 if uploaded_file and st.button("🚀 Start Final Sync"):
-    df_excel = pd.read_excel(uploaded_file)
-    start_safe_sync(df_excel, t_choice)
+    with st.spinner("Reading Excel..."):
+        df_excel = pd.read_excel(uploaded_file)
+        start_safe_sync(df_excel, t_choice)
