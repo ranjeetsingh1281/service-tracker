@@ -1,85 +1,74 @@
 import streamlit as st
 import pandas as pd
+import os
 
-# --- Page Config ---
-st.set_page_config(page_title="ELGi Service Tracker", layout="wide", page_icon="🚜")
+# --- Page Setup ---
+st.set_page_config(page_title="ELGi Service Tracker", layout="wide")
 
-# --- Custom Styling ---
-st.markdown("""
-    <style>
-    .main { background-color: #f0f2f6; }
-    .stMetric { background-color: #ffffff; padding: 10px; border-radius: 8px; box-shadow: 2px 2px 5px rgba(0,0,0,0.1); }
-    </style>
-    """, unsafe_allow_html=True)
-
-# --- Data Loader (Direct from GitHub Files) ---
+# --- Function to Load Data Safely ---
 @st.cache_data
-def load_data():
-    try:
-        # 1. Master Data Load
-        m_df = pd.read_excel("Master_Data.xlsx", engine='openpyxl')
-        # 2. History Data Load
-        h_df = pd.read_excel("Service_Details.xlsx", engine='openpyxl')
+def load_all_data():
+    master_path = "Master_Data.xlsx"
+    history_path = "Service_Details.xlsx"
+    
+    # Check if files exist on GitHub
+    if not os.path.exists(master_path) or not os.path.exists(history_path):
+        return None, None
         
-        # Column names se extra spaces hatana
+    try:
+        # Loading Excel Files
+        m_df = pd.read_excel(master_path, engine='openpyxl')
+        h_df = pd.read_excel(history_path, engine='openpyxl')
+        
+        # Column names clean karna
         m_df.columns = m_df.columns.str.strip()
         h_df.columns = h_df.columns.str.strip()
         
         return m_df, h_df
     except Exception as e:
-        st.error(f"⚠️ Error: Files nahi mil rahi hain! Check karein ki GitHub par 'Master_Data.xlsx' aur 'Service_Details.xlsx' uploaded hain.")
+        st.error(f"Excel Load Error: {e}")
         return None, None
 
-# --- Main App Logic ---
-st.title("🚜 ELGi Smart Service Tracker (Offline Mode)")
-st.write("Current Status: **Excel Database Active** ✅")
+# --- Main Dashboard ---
+st.title("🚜 ELGi Smart Service Tracker")
+st.info("Status: Running on Local Excel Database (GitHub) ✅")
 
-master, history = load_data()
+master, history = load_all_data()
 
 if master is not None:
-    # Sidebar Search
-    st.sidebar.header("🔍 Search Machine")
-    search_id = st.sidebar.text_input("Enter Fabrication Number", placeholder="e.g. 12345")
+    # Search Box
+    search_id = st.text_input("🔢 Enter Fabrication Number (e.g. 12345)", key="search")
 
     if search_id:
-        # Detect Fabrication Column
-        fab_col = next((c for c in master.columns if 'Fabrication' in c), None)
+        # Detect Fabrication Column in Master
+        fab_col = next((c for c in master.columns if 'Fabrication' in str(c)), None)
         
         if fab_col:
-            # Finding exact match
-            res = master[master[fab_col].astype(str) == str(search_id).strip()]
+            # Find the machine
+            match = master[master[fab_col].astype(str).str.strip() == str(search_id).strip()]
             
-            if not res.empty:
-                machine = res.iloc[0]
-                st.success(f"✅ Machine Found: **{machine.get('Customer', 'N/A')}**")
+            if not match.empty:
+                row = match.iloc[0]
+                st.success(f"✅ Machine Found: {row.get('Customer', 'Unknown')}")
                 
-                # --- Quick Metrics ---
+                # Metrics Row
                 m1, m2, m3, m4 = st.columns(4)
-                m1.metric("Current HMR", f"{machine.get('CURRENT HMR', 0)} hrs")
-                m2.metric("Category", machine.get('Category', 'N/A'))
-                m3.metric("Status", machine.get('Unit Status', 'Active'))
-                m4.metric("Avg Running", f"{machine.get('Avg. Running', 0)} hrs")
+                m1.metric("Current HMR", f"{row.get('CURRENT HMR', 0)} hrs")
+                m2.metric("Category", row.get('Category', 'N/A'))
+                m3.metric("Status", row.get('Unit Status', 'Active'))
+                m4.metric("Avg Running", f"{row.get('Avg. Running', 0)} hrs")
 
-                # --- Service History Section ---
-                st.divider()
-                st.subheader("📜 Detailed Service History")
+                # --- History Section ---
+                st.subheader("🕒 Service History")
+                h_fab_col = next((c for c in history.columns if 'Fabrication' in str(c)), None)
                 
-                if history is not None:
-                    h_fab_col = next((c for c in history.columns if 'Fabrication' in c), None)
-                    if h_fab_col:
-                        # Filter history for this machine
-                        h_res = history[history[h_fab_col].astype(str) == str(search_id).strip()]
-                        if not h_res.empty:
-                            st.dataframe(h_res, use_container_width=True)
-                        else:
-                            st.info("Is machine ki koi purani history Service_Details.xlsx mein nahi mili.")
+                if h_fab_col:
+                    h_match = history[history[h_fab_col].astype(str).str.strip() == str(search_id).strip()]
+                    if not h_match.empty:
+                        st.dataframe(h_match, use_container_width=True)
+                    else:
+                        st.warning("No history found in Service_Details.xlsx for this machine.")
             else:
                 st.error("❌ Fabrication Number match nahi hua. Dubara check karein.")
-        else:
-            st.error("Excel mein 'Fabrication' column nahi mil raha.")
-    else:
-        st.info("💡 Sidebar mein Fabrication Number daalein machine ki history dekhne ke liye.")
-
-# Footer Check
-st.sidebar.markdown("---")
-st.sidebar.caption("💡 Tip: Excel file update karne par GitHub par 'Commit' zaroori hai.")
+else:
+    st.error("🚨 Files load nahi ho rahi hain. GitHub par 'Master_Data.xlsx' check karein.")
